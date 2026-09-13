@@ -1,0 +1,248 @@
+# Grit
+
+**An AI assistant that asks whether you want to do the work yourself — and teaches you when the answer is yes.**
+
+When the AI is about to do something, it asks whether you'd rather do it yourself. If you would, it names the skills involved, checks whether you actually have them, offers an interactive tutorial for the gaps, then hands over the task and asks you to justify the result.
+
+Learning lives at the person level (`~/.grit/`), not per project, and surfaces as a dashboard.
+
+The name is the thesis: grit is the opposite of friction-avoidance.
+
+> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is still missing is **tutorial generation** — the second evidence source — so today every score comes from real tasks. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/index.md). **Read [ADR 0007](docs/adr/0007-critical-path-battery-validity.md) before building anything** — it names the assumption that everything else rests on.
+
+---
+
+## The problem
+
+AI assistants optimize for throughput. The path of least resistance is to let the AI write everything — which feels productive and quietly erodes skill.
+
+Three results support this, strongest first:
+
+- **Bastani et al., [PNAS 2025](https://www.pnas.org/doi/10.1073/pnas.2422633122)** — ~1,000 students, three arms. Unrestricted GPT access caused **−17% on an unassisted exam**; a **guardrailed tutor eliminated the harm**. Causal and peer-reviewed.
+- **METR, [2025](https://arxiv.org/abs/2507.09089)** — RCT, 16 experienced OSS developers, 246 tasks on their own repos. AI made them **19% slower** while they believed it made them **20% faster**.
+- **Shen & Tamkin, [2026](https://arxiv.org/abs/2601.20245)** — 52 **novice** developers learning an unfamiliar library. AI impaired conceptual understanding and debugging, with **no significant average efficiency gain**.
+
+Cited deliberately as a counterweight: [Cui et al., Management Science 2025](https://pubsonline.informs.org/doi/10.1287/mnsc.2025.00535) — 4,867 developers, **+26% task completion**. AI helps throughput. Our claim is narrower: throughput and skill are separate outcomes, and only one is currently measured.
+
+---
+
+## The workflow
+
+**Agree the concepts → choose how → you write it → check → verify who wrote it → score.**
+
+```
+ ① AGREE      You: add rate limiting to the login route
+              AI:  This exercises token-bucket and atomic-counters. Right?
+                   ↓ your edit wins — they are your concept names
+ ─────────────────────────────────────────────────────────────────────
+ ② CHOOSE     1. I'll do it          full credit
+              2. Walk me through it  half credit
+              3. You do it           no credit
+ ─────────────────────────────────────────────────────────────────────
+ ③ DIY        You write the code. The AI answers questions, explains,
+              points at files — and writes nothing.
+ ─────────────────────────────────────────────────────────────────────
+ ④ CHECK      npm test -- rate-limiter      must actually pass
+ ─────────────────────────────────────────────────────────────────────
+ ⑤ VERIFY     verify_edit.py says who wrote it, from git + the hook log
+              HUMAN-WRITTEN / ASSISTED / UNVERIFIED / NOTHING CHANGED
+ ─────────────────────────────────────────────────────────────────────
+ ⑥ SCORE      one evidence event per concept
+              credit = source × assistance × novelty
+```
+
+**You do not have to be trusted for any of this.** The hook observes every byte the assistant writes, so the `assistance` coefficient is measured rather than declared. If the AI wrote it, the concept earns zero whatever anyone intended.
+
+## The score
+
+`credit = source_weight × assistance × novelty`, summed per concept and capped at 1.0.
+
+| Factor | Values | Why |
+|---|---|---|
+| source | repo **0.5** · sandbox **0.2** | shipping it beats an exercise about it |
+| assistance | none **1.0** · partial **0.5** · full **0.0** | if the AI wrote it, it earns nothing |
+| novelty | `1/(1+repeats)`, capped at **1.5× weight per task** | repetition is practice, not new evidence |
+
+`unproven` → **recall** at 0.30 → **proven** at 0.80 *and at least two distinct unaided repository tasks*.
+
+```
+1 unaided repo task              0.50  recall
++ same tutorial ground 6x        0.80  recall   ← capped; grinding cannot prove
++ a task the AI wrote            0.80  recall   ← contributes exactly 0
++ a 2nd distinct unaided task    1.00  proven
+```
+
+Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0014](docs/adr/0014-graded-score-from-capped-evidence.md).
+
+## The dashboard
+
+The dashboard is the entry gate, not a status page ([ADR 0004](docs/adr/0004-measure-the-effect.md)). It opens on first run, asks what to call you and which theme you want, and applies each theme live as you click it.
+
+Six themes — **Dungeon** (torchlit amber), **Terminal** (green phosphor and scanlines), **Synthwave** (neon magenta and cyan), **Forest** (moss and bark), **Arcade** (high contrast), **Paper** (light and printed). Animations can be turned off. The choice is stored in `~/.grit/preferences.json` and changeable any time from **Settings**.
+
+It reads as a game — rank badges, concept cards, a proficiency panel — and it deliberately has **no XP, no streaks, and nothing to grind.** There is a score, but it is *derived* from evidence rather than accumulated, recomputed on every read, and it can go *down*. A number you add to is a number you can farm, and a farmed record proves nothing.
+
+```bash
+python3 skills/grit/serve.py --root ~/.grit     # prints its URL; also written to ~/.grit/daemon.json
+```
+
+## Install
+
+**Primary targets: Claude Code and zrb.** The skill is runtime-neutral, so it installs to any assistant that reads a `skills/` directory.
+
+```bash
+bin/install.sh                            # auto-detect — install to tools already on this machine
+bin/install.sh --claude                   # Claude Code only
+bin/install.sh --zrb                      # zrb only
+bin/install.sh --tools codex,cursor       # specific tools (comma-separated)
+bin/install.sh --tools all                # all 31 known tools
+bin/install.sh --no-hook                  # skill only, skip the hook
+bin/install.sh --dry-run --tools cursor   # preview, change nothing
+bin/install.sh --uninstall --tools all    # remove
+bin/install.sh --doctor                   # check every registration on this machine
+bin/install.sh --here                     # project-scoped, no changes under ~
+```
+
+Portable bash (works on macOS's bash 3.2). Replaces any prior copy, never touches skills that are not `grit`, and **verifies what it installed** — both self-checks must pass or it exits non-zero rather than leaving you a half-working tool.
+
+### The skill installs everywhere; the hook does not
+
+The skill goes to `<dotdir>/skills/grit/` for every target — zrb, Claude Code, Codex, OpenCode, Cursor, Windsurf, Copilot, Gemini CLI, Cline and 20+ more.
+
+The hook needs a `PreToolUse` mechanism, which only some runtimes have:
+
+| Runtime | Hook registered in | Format |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | nested `hooks.PreToolUse` block |
+| zrb | `~/.zrb/hooks.json` | zrb's native hook array |
+| everything else | — | skill works; no prompt, and authorship is `UNVERIFIED` |
+
+Both are merged, not overwritten — existing hooks and settings are preserved, and a backup is taken first. The installer says plainly which targets got no hook rather than pretending they did.
+
+> zrb also reads `~/.claude/settings.json` for Claude compatibility, so on a machine with both, one edit reaches the hook twice. The hook de-duplicates inside a 2-second window, so authorship is still counted once — the same guard covers a user-level and project-level install both firing.
+
+Manual install, if you prefer:
+
+```bash
+mkdir -p ~/.zrb/skills && cp -R skills/grit ~/.zrb/skills/       # zrb
+mkdir -p ~/.claude/skills && cp -R skills/grit ~/.claude/skills/ # Claude Code
+# any other tool — same pattern: <dotdir>/skills/
+```
+
+Your measured profile always lives in `~/.grit`, whatever runtime you use: proficiency belongs to the person, not the tool and not the repo.
+
+### Without the hook, what degrades
+
+The teaching loop is unaffected — tutorials, the three gates, the ledger, the profile and the dashboard all run off the daemon. Two things are lost, and the second is the important one:
+
+1. **Authorship is no longer observed.** `verify_edit.py` still proves *what* changed, from git, and reports `UNVERIFIED` rather than guessing *who* wrote it. An honest gap, not a silent one.
+2. **The moment is gone.** With no `PreToolUse`, grit only activates when the model judges it relevant or you invoke it — which turns "you are asked every time" into an opt-in mode. That is precisely the shape Kapoor et al. measured failing (N=885: 50% took the bypass, most often the people who needed the friction). On a runtime without a hook, grit is a good tutor; it is not the thing it claims to be.
+
+### Try it without installing
+
+Point the runtime at this repo. **Run this from the grit checkout** — it fills in the absolute path itself rather than asking you to substitute one:
+
+```bash
+bin/install.sh --here          # writes .zrb/hooks.json + .claude/skills symlink, project-scoped
+```
+
+Undo with `bin/install.sh --here --uninstall`.
+
+> An earlier version of this section was a copy-paste block containing the literal placeholder `/ABSOLUTE/PATH/TO/grit/hooks/grit-hook.py` inside a quoted heredoc, so pasting it produced a hook pointing at a path that does not exist. Because a missing script makes Python exit 2 — the same code both runtimes read as *block this tool call* — that config silently broke **every file write in the project** until someone read the config by hand. Hence `--here`, and hence the `|| exit 0` guard now on every registration.
+
+Check any machine at any time:
+
+```bash
+bin/install.sh --doctor        # every registration, and whether its script actually exists
+```
+
+### The hook
+
+It fires on `Write`/`Edit` and does two things:
+
+1. **Records who wrote the code**, to `<project>/.grit/authorship.jsonl`. Edits (`Write`, `Edit`, `NotebookEdit`) are recorded exactly, with line counts. Shell calls (`Bash`, `PowerShell`) are recorded as **opaque** — an assistant can write files with `python3 - <<EOF` or `sed -i`, and nothing observes what those touched. Recording the call without a line count is weaker than seeing the edit, but "something unattributable happened" is true and silence is not: without this, shell-written code reads as human-written.
+2. **Asks once per session**, the first time the assistant reaches for the editor. Once. A prompt on every edit is how a tool gets uninstalled.
+
+Turn it off three ways: `touch .grit/off` in a project, `GRIT_OFF=1` everywhere, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` (which keeps the recording and drops the prompt).
+
+## Try it
+
+```bash
+python3 skills/grit/serve.py --root ~/.grit --daemon   # detached; survives closing the shell
+python3 skills/grit/serve.py --root ~/.grit --stop     # stop it
+```
+
+Open the URL it prints. You will get the onboarding gate and a dashboard with **nothing in it**, which is the honest state — see below for why.
+
+```bash
+python3 skills/grit/test_serve.py    # 6 integrity properties
+python3 hooks/test_hook.py           # 14 hook properties
+python3 skills/grit/score.py selftest  # 12 scoring properties
+```
+
+## What you can actually do with this today
+
+**You can measure who wrote your code.** Install it, work normally, and the hook records every edit the assistant makes — including shell writes, as unattributable. `verify_edit.py` then tells you, per task, whether a change was human-written, assisted, or unverifiable. That part is real, tested, and useful on its own.
+
+**You can earn a score from real work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself:
+
+```
+concept level  ←  evidence.jsonl  ←  a repository task you did unaided   ✅ works today
+                                  ←  a completed tutorial                ⛔ no generator
+```
+
+**What is missing is the second evidence source.** Nothing generates a tutorial, so every score today comes from real repository tasks. The runtime that *delivers* a tutorial works — hand-write one and completing it scores — but authoring the concept text and its differential test by hand, per concept, is the gap.
+
+| Piece | State |
+|---|---|
+| Authorship hook, `verify_edit` | **works** |
+| Scoring from real repository tasks | **works** — this is the product |
+| Daemon, gates, ledger integrity | **works** |
+| Dashboard, themes, auto-refresh | **works** |
+| Tutorial runtime | works, but nothing **generates** a tutorial |
+| Onboarding battery, router | **do not exist** — and ADR 0014 removed the need for them to exist first |
+
+Read that as: the measurement substrate is built, the product is not. Building the battery is the critical path, and its core assumption is still untested — see [ADR 0007](docs/adr/0007-critical-path-battery-validity.md).
+
+## Documentation
+
+| Path | What it is |
+|------|-----------|
+| [docs/DESIGN.md](docs/DESIGN.md) | The workflow, on-disk layout, data contracts, build order |
+| [docs/adr/](docs/adr/index.md) | **Decision records** — why the design is this way, and what was rejected |
+| [docs/LANDSCAPE.md](docs/LANDSCAPE.md) | Competing products, supporting evidence in tiers, the gaps |
+| [docs/USAGE.md](docs/USAGE.md) | Historical: a worked example of the original flow (superseded) |
+| [ADR 0013](docs/adr/0013-dashboard-polls-files-it-does-not-push.md) | **The data path**, as a diagram — onboarding → day-to-day → dashboard |
+| [docs/dev-fixtures.md](docs/dev-fixtures.md) | Props for exercising the runtime — not user instructions |
+| [bin/install.sh](bin/install.sh) | Multi-runtime installer — zrb, Claude Code, and 29 more |
+| [hooks/](hooks/) | The `PreToolUse` hook and its self-check |
+| `bin/install.sh --doctor` | Finds broken or unguarded hook registrations anywhere on the machine |
+| [skills/grit/](skills/grit/SKILL.md) | The skill, plus `serve.py`, `dashboard.html`, `test_serve.py` |
+
+---
+
+## What v1 does
+
+- **Authorship recording** — every byte the assistant writes, including opaque shell calls *(built)*
+- **`verify_edit.py`** — who wrote it, from git plus the authorship log *(built)*
+- **Graded scoring** — per-concept levels from capped evidence *(built)*
+- **DIY mode** — the assistant answers but does not write; enforced by the record, not by trust *(built)*
+- **Acceptance checks** — command/test; a task scores on a pass, not on your say-so *(built)*
+- **Dashboard** — authorship, proficiency, six themes, auto-refresh *(built)*
+- **Tutorials as a second evidence source** — the runtime exists; **the generator does not**
+
+**Not in v1:** team or hosted features, non-coding domains, cross-user benchmarking, a tutorial library, and any claim beyond harm avoidance.
+
+---
+
+## Two things to know before contributing
+
+**The honest claim.** This design may **avoid harm**. It does not claim to make anyone more skilled. Bastani et al.'s guardrailed arm was statistically indistinguishable from control — not better. No study shows a tool producing skill *gains* over working unaided.
+
+**The unproven assumption.** Everything depends on a battery predicting real-work proficiency. If it does not, routing runs on noise and the design collapses to a mirror. This is [ADR 0007](docs/adr/0007-critical-path-battery-validity.md), and it is testable before any implementation work.
+
+---
+
+## License
+
+Not yet chosen.

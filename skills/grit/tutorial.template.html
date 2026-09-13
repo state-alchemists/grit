@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- CONCEPT --> — Grit tutorial</title>
+
+<!--
+  GRIT INTERACTIVE TUTORIAL TEMPLATE
+
+  A single self-contained HTML file. No build step, no network, no dependencies.
+  Generated per-concept, cached in ~/.grit/tutorials/, opened from the dashboard.
+
+  WHY SELF-CONTAINED: inference and measurement stay local (Design §8). A tutorial
+  that phones home would leak the user's weakness profile. This file must run
+  offline, from the filesystem.
+
+  THE CONTRACT:
+    1. `check(userCode)` returns { pass, message } — the acceptance check.
+       It runs in a Worker. The user's code cannot see the tests.
+    2. `verify()` — the tool's own self-test. CANNOT be overridden by user code.
+       If this fails, the tutorial is broken and says so.
+    3. `justification` — asked AFTER a pass, never before.
+
+  Placeholders: CONCEPT, TASK, CHECK_SOURCE, JUSTIFICATION, SOLUTION
+
+  IMPORTANT — the self-test contract:
+  A `text/plain` script's final expression is its value, but it is NOT executed
+  by the browser; the host reads it as text and evaluates it. So the self-test
+  MUST call `self.postMessage(...)` itself. Returning a value silently does
+  nothing, and a silently-skipped self-test is worse than none: it reports
+  healthy while checking nothing. Verify with the template's own test harness.
+-->
+
+<style>
+  :root {
+    --bg: #16161a; --panel: #1e1e24; --border: #2c2c34; --fg: #e4e4e7;
+    --muted: #8b8b96; --accent: #7dd3a0; --fail: #e07a7a; --warn: #d8b866;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: .85rem; margin-bottom: 28px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px; margin-bottom: 20px;
+  }
+  .panel h2 {
+    font-size: .78rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 14px; font-weight: 600;
+  }
+  .panel p:first-child { margin-top: 0; }
+  .panel p:last-child { margin-bottom: 0; }
+  textarea {
+    width: 100%; min-height: 220px; background: #131317; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 14px;
+    font: 13px/1.55 var(--mono); resize: vertical; tab-size: 2;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: #10201a; border: 0; border-radius: 6px;
+    padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 400; }
+  button:hover { opacity: .88; }
+  button:disabled { opacity: .4; cursor: default; }
+  #out { margin-top: 14px; font: 13px/1.55 var(--mono); white-space: pre-wrap; }
+  .pass { color: var(--accent); }
+  .fail { color: var(--fail); }
+  .warn { color: var(--warn); }
+  .muted { color: var(--muted); font-size: .85rem; }
+  #verify-banner { display: none; border-color: var(--fail); }
+  #verify-banner.show { display: block; }
+  details { margin-top: 20px; }
+  summary { cursor: pointer; color: var(--muted); font-size: .85rem; user-select: none; }
+  details[open] summary { margin-bottom: 12px; }
+  pre {
+    background: #131317; border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px; overflow-x: auto; font: 13px/1.55 var(--mono); margin: 0;
+  }
+  /* Preference-driven presentation. The core interaction is fixed. */
+  body[data-depth="minimal"] .depth-deep { display: none; }
+  body[data-depth="deep"] .depth-minimal { display: none; }
+  body[data-format="terse"] .format-prose { display: none; }
+</style>
+</head>
+<body data-depth="standard" data-format="socratic">
+
+<div class="wrap">
+
+  <h1><!-- CONCEPT --></h1>
+  <div class="sub">
+    You will be able to: <!-- SKILL --> &nbsp;·&nbsp;
+    <span class="muted">sandbox check — see the caveat at the bottom</span>
+  </div>
+
+  <!-- Broken-tool banner. Populated by verify(). Never trustworthy if hidden. -->
+  <div class="panel" id="verify-banner">
+    <h2>This tutorial is broken</h2>
+    <p id="verify-msg" class="fail"></p>
+    <p class="muted">Do not trust a pass below. Report this; the tutorial needs regenerating.</p>
+  </div>
+
+  <!-- ── Gap-triggered narrative. Present only because the concept was measured unfamiliar. ── -->
+  <div class="panel">
+    <h2>The concept</h2>
+    <p class="depth-deep"><!-- One paragraph: the mechanism, from first principles. --></p>
+    <p class="depth-minimal format-prose"><!-- One sentence: what it is and why it bites. --></p>
+    <p class="format-prose"><!-- Why it matters in *this* repo, at *this* point. Real files. --></p>
+  </div>
+
+  <!-- ── The exercise: the mechanism, not decoration. ── -->
+  <div class="panel">
+    <h2>Your task</h2>
+    <p><!-- TASK: what to implement, stated as a requirement, not as steps. --></p>
+    <p class="muted">
+      Edit the function below. The check runs in a worker; your code cannot see the tests.
+    </p>
+  </div>
+
+  <textarea id="code" spellcheck="false" autocomplete="off"></textarea>
+
+  <div class="row">
+    <button id="check">Run check</button>
+    <button id="reset" class="ghost">Reset</button>
+    <span class="muted" id="hint-status"></span>
+  </div>
+
+  <div id="out"></div>
+
+  <!-- ── Justification: asked AFTER a pass, never before. ── -->
+  <div class="panel" id="justify" style="display:none">
+    <h2>Justify</h2>
+    <p><strong><!-- JUSTIFICATION --></strong></p>
+    <textarea id="reason" style="min-height:110px"
+      placeholder="Answer in your own words. This is the part that is actually measured."></textarea>
+    <div class="row">
+      <button id="submit-reason">Submit</button>
+    </div>
+    <div id="reason-out" class="muted"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Note</h2>
+    <p class="muted">
+      This is a <strong>sandbox check</strong>. It verifies the concept in JavaScript, not in your
+      repository. Passing here means you can implement the idea; it does not mean your service is
+      fixed. Close the real task with a repository check.
+    </p>
+  </div>
+
+</div>
+
+<!-- ══ THE CHECK ══════════════════════════════════════════════════════════════
+     CHECK_SOURCE is the acceptance check, as a worker payload.
+     It receives the user's code as a string, along with the tool's own
+     reference implementation where one is needed for differential testing.
+
+     RULES:
+       - Return { pass: bool, message: string }. Never throw for a normal failure.
+       - Test BEHAVIOUR, not shape. Do not grep the source for a pattern:
+         that is gameable and tests nothing.
+       - Cover the edge case that the concept is actually about.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script type="text/plain" id="check-source">
+// CHECK_SOURCE — replaced by the generator.
+// Differential test: run the user's implementation against the reference and
+// compare observable outputs across cases including the boundary.
+
+const cases = [
+  // { args: [...], label: "steady state" },
+  // { args: [...], label: "boundary: capacity exceeded" },
+];
+
+function run(code, cases) {
+  // 1. Evaluate the user's code to obtain `solve`.
+  // 2. For each case, compare against the reference.
+  // 3. Return { pass, message }.
+  return { pass: false, message: "CHECK_SOURCE not implemented." };
+}
+</script>
+
+<!-- Tool self-test. A compromised self-test proves nothing.
+
+     The self-test MUST call self.postMessage() itself and terminate. A
+     text/plain script is read as text by the host, not executed as a
+     module — a bare `return` is a silent no-op, and a self-test that
+     silently checks nothing is worse than none at all. -->
+<script type="text/plain" id="verify-source">
+// VERIFY_SOURCE — replaced by the generator.
+// Must post { ok: bool, message: string }, then close.
+// Must assert all three: (1) the reference passes,
+// (2) a known-wrong implementation FAILS, (3) the boundary case is covered.
+// Asserting only (1) is a self-test that cannot fail, which proves nothing.
+self.postMessage({ ok: false, message: "VERIFY_SOURCE not implemented." });
+</script>
+
+<script>
+// ── Starter code and reference solution ──────────────────────────────────────
+const STARTER = `// CONCEPT
+// Implement solve() so the checks pass.
+
+function solve(...args) {
+  // your code here
+}
+`;
+
+const SOLUTION = null; // string | null — reference, for differential testing
+
+// ── Preference layer: presentation only, never the mechanism ──────
+const prefs = { depth: "standard", format: "socratic" };
+document.body.dataset.depth = prefs.depth;
+document.body.dataset.format = prefs.format;
+
+// ── State ────────────────────────────────────────────────────────────────────
+const codeEl = document.getElementById("code");
+const outEl = document.getElementById("out");
+let passed = false;
+let solveImpl = null;
+
+codeEl.value = localStorage.getItem(location.pathname + ":code") || STARTER;
+codeEl.addEventListener("input", () => {
+  localStorage.setItem(location.pathname + ":code", codeEl.value);
+});
+
+// ── Worker plumbing ──────────────────────────────────────────────────────────
+function makeWorker(source) {
+  const blob = new Blob([source], { type: "application/javascript" });
+  return new Worker(URL.createObjectURL(blob));
+}
+
+function runInWorker(source, payload, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const w = makeWorker(source);
+    const timer = setTimeout(() => {
+      w.terminate();
+      resolve({ pass: false, message: "Timed out — possible infinite loop." });
+    }, timeoutMs);
+    w.onmessage = (e) => { clearTimeout(timer); w.terminate(); resolve(e.data); };
+    w.onerror = (e) => {
+      clearTimeout(timer); w.terminate();
+      resolve({ pass: false, message: "Error: " + (e.message || "unknown") });
+    };
+    w.postMessage(payload);
+  });
+}
+
+// ── The check source, wrapped for the worker ─────────────────────────────────
+// Extracted once so both the check and the self-test evaluate the same text.
+function buildCheckWrapper() {
+  const src = document.getElementById("check-source").textContent;
+  return `
+    self.onmessage = (e) => {
+      const { code, solution } = e.data;
+      try {
+        const solve = new Function(code + "; return typeof solve === 'function' ? solve : null;")();
+        if (!solve) {
+          self.postMessage({ pass: false, message: "No function named 'solve' was defined." });
+          return;
+        }
+        const result = (function() {
+          ${src}
+          return run(code, solve, solution);
+        })();
+        self.postMessage(result);
+      } catch (err) {
+        self.postMessage({ pass: false, message: "Error: " + err.message });
+      }
+    };
+  `;
+}
+
+// ── The tool's own self-test. Runs first, and gates the check button. ────────
+// The self-test posts its own result. If it never posts, that is a failure,
+// not a pass — a silent no-op must not read as "healthy".
+(async function selfTest() {
+  const banner = document.getElementById("verify-banner");
+  const msg = document.getElementById("verify-msg");
+  const checkBtn = document.getElementById("check");
+  const fail = (message) => {
+    msg.textContent = message;
+    banner.classList.add("show");
+    checkBtn.disabled = true;
+  };
+  try {
+    const src = document.getElementById("verify-source").textContent;
+    const result = await new Promise((res) => {
+      let w;
+      try {
+        w = new Worker(URL.createObjectURL(new Blob([
+          buildCheckWrapper() + "\n" + src
+        ], { type: "application/javascript" })));
+      } catch (err) { res({ ok: false, message: "worker failed to start: " + err }); return; }
+      const timer = setTimeout(() => {
+        w.terminate();
+        res({ ok: false, message: "self-test posted nothing (timed out) — treat as broken" });
+      }, 3000);
+      w.onmessage = (e) => { clearTimeout(timer); w.terminate(); res(e.data); };
+      w.onerror = (e) => {
+        clearTimeout(timer); w.terminate();
+        res({ ok: false, message: "self-test threw: " + (e.message || "unknown") });
+      };
+      // No payload needed; the self-test drives the check itself.
+      w.postMessage({ code: "", solution: null });
+    });
+    if (!result || result.ok !== true) fail((result && result.message) || "self-test failed");
+  } catch (err) {
+    fail(String(err));
+  }
+})();
+
+// ── Reporting: the daemon is the source of truth ──────────────────
+// The page never writes the ledger. It reports over loopback with a session
+// token minted by `grit serve` at launch. If no daemon is reachable, the page
+// says so and offers the clipboard fallback — it does NOT silently pretend to
+// have recorded anything.
+// The daemon injects `window.GRIT_SESSION` when it serves the page. A `?session=`
+// query param is also honoured for manually-opened files. No token -> no report.
+const SESSION = window.GRIT_SESSION ||
+  new URLSearchParams(location.search).get("session") || null;
+// Same origin when the daemon served this page — the normal path, and the only
+// one that works now that CORS is closed. For a file:// page opened by hand,
+// fall back to the address the daemon injected, then to ?daemon=, then to the
+// default port. Nothing here assumes 7801 is still true.
+const DAEMON =
+  location.protocol.startsWith("http") ? ""
+  : (window.GRIT_DAEMON
+     || new URLSearchParams(location.search).get("daemon")
+     || "http://127.0.0.1:7801");
+
+async function report(event, payload) {
+  if (!SESSION) return { ok: false, reason: "no-session" };
+  try {
+    const res = await fetch(DAEMON + "/tutorial/" + encodeURIComponent(SESSION) + "/" + event, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return { ok: false, reason: "daemon-" + res.status };
+    return { ok: true, data: await res.json() };
+  } catch (err) {
+    return { ok: false, reason: "unreachable" };
+  }
+}
+
+// Clipboard fallback: a signed-ish token the user pastes into the assistant.
+function fallbackToken(event, payload) {
+  const token = {
+    v: 1,
+    concept: document.title,
+    event,
+    payload,
+    at: new Date().toISOString(),
+    session: SESSION,
+  };
+  return "GRIT:" + btoa(unescape(encodeURIComponent(JSON.stringify(token))));
+}
+
+// ── The check ────────────────────────────────────────────────────────────────
+document.getElementById("check").onclick = async () => {
+  outEl.textContent = "Running…";
+  outEl.className = "";
+
+  const result = await runInWorker(
+    buildCheckWrapper(),
+    { code: codeEl.value, solution: SOLUTION }
+  );
+
+  if (result.pass) {
+    passed = true;
+    outEl.className = "pass";
+    outEl.textContent = "✓ " + result.message;
+    // Gate 1 of 3: the check. Reporting it does not complete the concept.
+    report("check", { concept: document.title, passed: true, message: result.message });
+    document.getElementById("justify").style.display = "block";
+    document.getElementById("justify").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } else {
+    outEl.className = "fail";
+    outEl.textContent = "✗ " + result.message;
+  }
+};
+
+document.getElementById("reset").onclick = () => {
+  codeEl.value = STARTER;
+  localStorage.removeItem(location.pathname + ":code");
+  outEl.textContent = "";
+  document.getElementById("justify").style.display = "none";
+  passed = false;
+};
+
+// ── Gate 2 of 3: the justification is submitted. Gate 3 is the judgment. ─────
+// This records the answer; it does NOT mark the concept earned. Only the
+// assistant, judging this text, does that.
+document.getElementById("submit-reason").onclick = async () => {
+  const answer = document.getElementById("reason").value.trim();
+  const out = document.getElementById("reason-out");
+  if (!answer) { out.className = "fail"; out.textContent = "Write something."; return; }
+
+  out.className = "";
+  out.textContent = "Sending…";
+
+  const res = await report("justification", {
+    concept: document.title,
+    check_passed: passed,
+    check_type: "sandbox",   // never conflate with a repository check
+    answer,
+  });
+
+  if (res.ok) {
+    const d = res.data || {};
+    if (d.judgment === "sound") {
+      out.className = "pass";
+      out.textContent = "Earned. " + (d.message || "The justification holds.");
+    } else if (d.judgment === "unsound") {
+      out.className = "fail";
+      out.textContent = "Not earned yet. " + (d.message || "A drill has been queued.");
+    } else {
+      // The daemon took the answer but has not judged it. Do not claim earned.
+      out.className = "warn";
+      out.textContent = "Submitted. Waiting on judgment — not yet earned.";
+    }
+    return;
+  }
+
+  // No daemon. Say so plainly, and offer the handoff. Never fake the write.
+  out.className = "warn";
+  out.innerHTML =
+    "Not sent (" + res.reason + "). The assistant cannot see this yet.<br>" +
+    "<button class='ghost' id='copy-token' style='margin-top:10px'>Copy handoff token</button>";
+  document.getElementById("copy-token").onclick = async () => {
+    const token = fallbackToken("justification", {
+      concept: document.title, check_passed: passed, check_type: "sandbox", answer,
+    });
+    try {
+      await navigator.clipboard.writeText(token);
+      out.innerHTML = "Token copied. Paste it into the assistant to record it.";
+    } catch (err) {
+      out.innerHTML = "<span class='muted'>Clipboard blocked. Select and copy manually:</span>" +
+        "<pre style='margin-top:10px'>" + token + "</pre>";
+    }
+  };
+};
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     AUTHORING NOTES (for the generator, not rendered)
+
+     1. The concept must be expressible in JS. Rate limiting, retry backoff,
+        queues, state machines, parsers, diffing — yes. GC tuning, goroutine
+        scheduling, SQL planner behaviour — no. If it cannot be modelled, it
+        needs a repository check, not a sandbox.
+
+     2. The check must test behaviour across boundary cases. Source-grepping
+        checks are gameable and measure nothing.
+
+     3. The self-test must include a known-wrong implementation. A check that
+        only passes correct code, and also passes everything else, is worse
+        than no check — it manufactures false confidence.
+
+     4. The check type is recorded with the result: "sandbox", never
+        interchangeable with a repository check.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+</body>
+</html>

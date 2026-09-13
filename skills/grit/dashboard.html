@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dungeon" data-motion="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grit</title>
+<style>
+/* ── Theme packs ───────────────────────────────────────────────────────────
+   Every theme defines the same tokens. Adding one means adding a block here
+   and a name to THEMES in serve.py — nothing else in this file changes.     */
+[data-theme="dungeon"]{
+  --bg:#15120d; --bg2:#1d1811; --panel:#221c14; --border:#3a2f21;
+  --fg:#ede0c8; --muted:#9c8b6e; --accent:#e0a93b; --accent2:#c4703a;
+  --ok:#8fbf6a; --warn:#d9a441; --fail:#c05c4a; --ring:#e0a93b;
+  --display:"Iowan Old Style",Georgia,serif; --glow:0 0 18px #e0a93b33;
+  --grain:radial-gradient(circle at 20% 10%,#ffcc7010,transparent 55%);
+}
+[data-theme="terminal"]{
+  --bg:#04120a; --bg2:#061a0e; --panel:#07200f; --border:#11421f;
+  --fg:#b6ffce; --muted:#4f9b6b; --accent:#39ff88; --accent2:#27c96a;
+  --ok:#39ff88; --warn:#d8e84a; --fail:#ff6b6b; --ring:#39ff88;
+  --display:ui-monospace,"SF Mono",Menlo,Consolas,monospace; --glow:0 0 22px #39ff8844;
+  --grain:repeating-linear-gradient(0deg,#0000 0 2px,#39ff8808 2px 3px);
+}
+[data-theme="synthwave"]{
+  --bg:#140a26; --bg2:#1c0f33; --panel:#21123d; --border:#3c2063;
+  --fg:#f3e9ff; --muted:#9b7ec4; --accent:#ff4ecd; --accent2:#41e2ff;
+  --ok:#41e2ff; --warn:#ffcf4e; --fail:#ff5a7a; --ring:#ff4ecd;
+  --display:"Avenir Next",Futura,system-ui,sans-serif; --glow:0 0 26px #ff4ecd55;
+  --grain:linear-gradient(180deg,#41e2ff10,transparent 40%);
+}
+[data-theme="forest"]{
+  --bg:#101a14; --bg2:#15241b; --panel:#182a1f; --border:#2a4433;
+  --fg:#e2ecdf; --muted:#84a08d; --accent:#7fc9a0; --accent2:#b8d66b;
+  --ok:#7fc9a0; --warn:#dcc169; --fail:#d08a7a; --ring:#7fc9a0;
+  --display:"Optima","Gill Sans",system-ui,sans-serif; --glow:0 0 16px #7fc9a033;
+  --grain:radial-gradient(circle at 80% 0%,#b8d66b0d,transparent 60%);
+}
+[data-theme="arcade"]{
+  --bg:#0b0d1a; --bg2:#121630; --panel:#161b3d; --border:#2b3470;
+  --fg:#ffffff; --muted:#8e97cc; --accent:#ffd83d; --accent2:#3dd6ff;
+  --ok:#4ef07a; --warn:#ffd83d; --fail:#ff4d6d; --ring:#ffd83d;
+  --display:"Trebuchet MS",Verdana,system-ui,sans-serif; --glow:0 0 0 3px #ffd83d33;
+  --grain:repeating-linear-gradient(45deg,#ffffff05 0 10px,transparent 10px 20px);
+}
+[data-theme="paper"]{
+  --bg:#f6f4ef; --bg2:#efece4; --panel:#ffffff; --border:#ddd8cc;
+  --fg:#23211c; --muted:#77726a; --accent:#9a5b2c; --accent2:#3f6f5a;
+  --ok:#3f6f5a; --warn:#a8791c; --fail:#a8443a; --ring:#9a5b2c;
+  --display:Charter,Georgia,serif; --glow:none;
+  --grain:none;
+}
+
+/* The `hidden` attribute is enforced by a UA rule, and ANY author rule that
+   sets `display` beats it — author origin wins over user-agent origin. `.veil`
+   sets display:grid, so the onboarding overlay ignored `hidden` entirely: Save
+   posted correctly but the dialog never closed, which reads as a dead button.
+   This guard must stay above every rule that sets `display`. */
+[hidden]{display:none!important}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+     font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;
+     background-image:var(--grain);background-attachment:fixed;}
+[data-motion="off"] *{transition:none!important;animation:none!important}
+.wrap{max-width:1000px;margin:0 auto;padding:28px 20px 80px}
+
+/* ── Header ── */
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.crest{width:42px;height:42px;border-radius:11px;flex:0 0 auto;
+  background:linear-gradient(140deg,var(--accent),var(--accent2));
+  display:grid;place-items:center;font:700 20px/1 var(--display);
+  color:var(--bg);box-shadow:var(--glow)}
+h1{font:600 1.45rem/1.2 var(--display);margin:0;letter-spacing:.01em}
+.tag{color:var(--muted);font-size:.83rem}
+.spacer{flex:1}
+button{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--border);
+  background:var(--panel);color:var(--fg);padding:8px 14px;transition:.15s}
+button:hover{border-color:var(--accent);box-shadow:var(--glow)}
+button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+button.ghost{background:transparent}
+
+/* ── Panels ── */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:20px;margin-top:18px}
+h2{font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.14em;
+   color:var(--muted);margin:0 0 14px}
+.muted{color:var(--muted)}
+
+/* ── Standing ── */
+.standing{display:flex;gap:26px;align-items:center;flex-wrap:wrap}
+.ring{--pct:0;width:116px;height:116px;flex:0 0 auto;border-radius:50%;
+  background:conic-gradient(var(--ring) calc(var(--pct)*1%),var(--border) 0);
+  display:grid;place-items:center;transition:--pct .6s}
+.ring i{width:88px;height:88px;border-radius:50%;background:var(--panel);
+  display:grid;place-items:center;font:700 1.5rem/1 var(--display);font-style:normal}
+.ring i small{display:block;font:400 .58rem/1.4 system-ui;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase}
+.tallies{display:flex;gap:10px;flex-wrap:wrap;flex:1;min-width:240px}
+.tally{flex:1 1 96px;border:1px solid var(--border);border-radius:11px;padding:12px 14px;
+  background:var(--bg2)}
+.tally b{display:block;font:700 1.6rem/1.1 var(--display)}
+.tally span{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.tally.proven b{color:var(--ok)} .tally.recall b{color:var(--accent)}
+.tally.unproven b{color:var(--fail)} .tally.stale b{color:var(--warn)}
+
+/* ── Concept cards ── */
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(232px,1fr))}
+.node{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--bg2);
+  transition:.18s;position:relative;overflow:hidden}
+.node:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:var(--glow)}
+.node.lv-strong{border-left:3px solid var(--ok)}
+.node.lv-recall{border-left:3px solid var(--accent)}
+.node.lv-weak{border-left:3px solid var(--fail)}
+.node h3{margin:0 0 8px;font:600 .95rem/1.3 var(--display);word-break:break-word}
+.badge{display:inline-block;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;
+  padding:3px 8px;border-radius:20px;border:1px solid currentColor;font-weight:700}
+.badge.strong{color:var(--ok)} .badge.recall{color:var(--accent)}
+.badge.weak{color:var(--fail)} .badge.stale{color:var(--warn)}
+.meter{height:6px;border-radius:4px;background:var(--border);margin:10px 0 6px;overflow:hidden}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
+  width:0;transition:width .7s ease-out}
+.node dl{display:flex;gap:12px;margin:8px 0 0;font-size:.74rem;color:var(--muted)}
+.node dl div{display:flex;gap:5px}
+.node dt{opacity:.75}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse}
+td,th{padding:8px 10px 8px 0;border-bottom:1px solid var(--border);font-size:.87rem;
+  text-align:left;vertical-align:top}
+th{font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+.pass{color:var(--ok)} .fail{color:var(--fail)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.84rem}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:34px 16px;color:var(--muted)}
+.empty b{display:block;font:600 1.05rem/1.4 var(--display);color:var(--fg);margin-bottom:6px}
+pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px;
+  overflow-x:auto;font-size:.82rem;text-align:left}
+
+/* ── Onboarding / settings overlay ── */
+/* flex + `margin:auto` on the child, NOT `place-items:center`. A centred grid
+   item taller than its container overflows equally in both directions, and
+   `overflow:auto` can only scroll down — so on a short window the top of the
+   dialog, and eventually the Save button, become unreachable. Auto margins
+   centre when there is room and collapse to the top when there is not. */
+.veil{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(6px);display:flex;align-items:flex-start;
+  justify-content:center;padding:20px;z-index:50;overflow:auto}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;
+  padding:26px;max-width:660px;width:100%;margin:auto;box-shadow:0 20px 70px #0006}
+.card h2{font-size:1.25rem;text-transform:none;letter-spacing:0;color:var(--fg);margin-bottom:4px}
+.field{margin:18px 0}
+label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);margin-bottom:7px}
+input[type=text]{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg2);color:var(--fg);font:inherit}
+input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+.themes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.swatch{border:2px solid var(--border);border-radius:12px;padding:11px;cursor:pointer;
+  background:var(--bg2);text-align:left;transition:.15s}
+.swatch[aria-pressed=true]{border-color:var(--accent);box-shadow:var(--glow)}
+.swatch em{display:flex;gap:5px;margin-bottom:9px;font-style:normal}
+.swatch em s{width:20px;height:20px;border-radius:6px;text-decoration:none}
+.swatch b{font:600 .88rem/1 var(--display);display:block}
+.swatch span{font-size:.7rem;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
+.row .spacer{flex:1}
+.toggle{display:flex;gap:8px;align-items:center;font-size:.8rem;color:var(--muted);cursor:pointer}
+footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <div class="panel" id="firstrun" hidden style="border-color:var(--accent)">
+    <h2>Start here</h2>
+    <p style="margin-top:0"><b>Nothing is measured until you do a task yourself.</b>
+       The hook is already recording what the assistant writes — that is the table below.
+       A <i>score</i> needs one more thing: work you did, with a check that passes.</p>
+    <p class="muted" style="font-size:.85rem">Ask your assistant:
+       <code>let's do a task — I'll write it myself</code>. It names the concepts, you
+       confirm them, you write the code, the check runs, and the concept gets a level.
+       Two distinct tasks done unaided make a concept <b>proven</b>; nothing else does.</p>
+    <div class="row">
+      <label class="toggle muted" style="cursor:default">Appearance is optional and changeable any time.</label>
+      <div class="spacer"></div>
+      <button class="ghost" id="firstrun-go">Pick a theme</button>
+      <button class="primary" id="firstrun-skip">Got it</button>
+    </div>
+  </div>
+
+  <header>
+    <div class="crest" id="crest">G</div>
+    <div>
+      <h1 id="hail">Grit</h1>
+      <div class="tag" id="rootline"></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="ghost" id="settings">Settings</button>
+  </header>
+
+  <div class="panel">
+    <h2>Written by the assistant</h2>
+    <div class="standing">
+      <div class="tallies">
+        <div class="tally unproven"><b id="a-lines">0</b><span>lines</span></div>
+        <div class="tally recall"><b id="a-edits">0</b><span>edits</span></div>
+        <div class="tally stale"><b id="a-shell">0</b><span>shell calls</span></div>
+        <div class="tally proven"><b id="a-taken">0</b><span>you took over</span></div>
+      </div>
+    </div>
+    <div id="authorship"></div>
+    <footer id="authnote"></footer>
+  </div>
+
+  <div class="panel">
+    <h2>Proficiency</h2>
+    <div class="standing">
+      <div class="tallies">
+        <div class="tally proven"><b id="s-proven">0</b><span>proven</span></div>
+        <div class="tally recall"><b id="s-recall">0</b><span>recall</span></div>
+        <div class="tally unproven"><b id="s-tracked">0</b><span>tracked</span></div>
+      </div>
+    </div>
+    <div class="grid" id="concepts"></div>
+    <footer id="claim"></footer>
+  </div>
+
+  <details class="panel" id="unbuilt">
+    <summary><b>Tutorials</b> — generator not built yet</summary>
+    <h2>Tutorials</h2>
+    <div id="tutorials"></div>
+    <h2>Recent runs</h2>
+    <div id="ledger"></div>
+  </details>
+</div>
+
+<div class="veil" id="veil" hidden>
+  <div class="card">
+    <h2 id="ob-title">Set up your dashboard</h2>
+    <p class="muted" id="ob-sub">Pick a look. It applies as you click, and you can change it any time.</p>
+
+    <div class="field">
+      <label for="callsign">What should the dashboard call you?</label>
+      <input type="text" id="callsign" placeholder="optional" autocomplete="off" maxlength="32">
+    </div>
+
+    <div class="field">
+      <label>Theme</label>
+      <div class="themes" id="themes"></div>
+    </div>
+
+    <div class="row">
+      <label class="toggle"><input type="checkbox" id="motion" checked> Animations</label>
+      <div class="spacer"></div>
+      <button class="ghost" id="ob-cancel" hidden>Cancel</button>
+      <button class="primary" id="ob-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme catalogue. Swatch colours are read from the live CSS so a palette
+//    edit above cannot drift from its preview here.
+const THEMES = [
+  ["dungeon",  "Dungeon",   "Torchlit amber on soot"],
+  ["terminal", "Terminal",  "Green phosphor, scanlines"],
+  ["synthwave","Synthwave", "Neon magenta and cyan"],
+  ["forest",   "Forest",    "Moss, bark, quiet"],
+  ["arcade",   "Arcade",    "High contrast, bold"],
+  ["paper",    "Paper",     "Light, printed, calm"],
+];
+const RANK = {strong:"Proven", recall:"Recall", weak:"Unproven"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let prefs = null;
+
+const getJSON = p => fetch(p).then(r => r.json());
+
+function applyTheme(name, motion) {
+  document.documentElement.dataset.theme = name;
+  document.documentElement.dataset.motion = motion === false ? "off" : "on";
+}
+
+// ── Onboarding / settings ───────────────────────────────────────────────────
+function buildSwatches(selected) {
+  const probe = document.createElement("div");
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  $("#themes").innerHTML = THEMES.map(([id, label, blurb]) => {
+    probe.dataset.theme = id;
+    const cs = getComputedStyle(probe);
+    const cols = ["--bg2", "--accent", "--accent2", "--fg"]
+      .map(v => cs.getPropertyValue(v).trim() || "#888");
+    return `<button class="swatch" data-theme="${id}" aria-pressed="${id === selected}">
+      <em>${cols.map(c => `<s style="background:${esc(c)}"></s>`).join("")}</em>
+      <b>${esc(label)}</b><span>${esc(blurb)}</span></button>`;
+  }).join("");
+  probe.remove();
+  $("#themes").querySelectorAll(".swatch").forEach(b => {
+    b.onclick = () => {
+      $("#themes").querySelectorAll(".swatch")
+        .forEach(x => x.setAttribute("aria-pressed", x === b));
+      applyTheme(b.dataset.theme, $("#motion").checked);   // live preview
+    };
+  });
+}
+
+function openSetup(firstRun) {
+  $("#ob-title").textContent = firstRun ? "Set up your dashboard" : "Settings";
+  $("#ob-sub").textContent = firstRun
+    ? "Pick a look. It applies as you click, and you can change it any time."
+    : "Change the look. Nothing here affects what is measured.";
+  $("#ob-cancel").hidden = false;   // always escapable; nothing here is required
+  $("#callsign").value = prefs.callsign || "";
+  $("#motion").checked = prefs.motion !== false;
+  buildSwatches(prefs.theme);
+  $("#veil").hidden = false;
+  ($("#callsign").value ? $("#ob-save") : $("#callsign")).focus();
+}
+
+function closeSetup() {
+  $("#veil").hidden = true;
+  applyTheme(prefs.theme, prefs.motion);     // discard any live preview
+}
+
+$("#motion").onchange = e =>
+  applyTheme(document.documentElement.dataset.theme, e.target.checked);
+$("#ob-cancel").onclick = closeSetup;
+$("#settings").onclick = () => openSetup(false);
+$("#firstrun-go").onclick = () => { $("#firstrun").hidden = true; openSetup(true); };
+$("#firstrun-skip").onclick = () => {
+  $("#firstrun").hidden = true;
+  // Remember the dismissal so it does not nag on every load.
+  fetch("/preferences", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({onboarded: true})}).catch(() => {});
+};
+
+$("#ob-save").onclick = async () => {
+  const picked = $("#themes").querySelector('[aria-pressed="true"]');
+  prefs = await fetch("/preferences", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      theme: picked ? picked.dataset.theme : prefs.theme,
+      callsign: $("#callsign").value.trim().slice(0, 32),
+      motion: $("#motion").checked,
+      onboarded: true,
+    }),
+  }).then(r => r.json());
+  applyTheme(prefs.theme, prefs.motion);
+  $("#veil").hidden = true;
+  render();
+};
+
+// ── Render ──────────────────────────────────────────────────────────────────
+const CLS = {proven: "strong", recall: "recall", unproven: "weak"};
+
+function conceptCard(name, c) {
+  const cls = CLS[c.level] || "weak";
+  const pct = Math.round((c.score || 0) * 100);
+  return `<div class="node lv-${cls}">
+    <h3>${esc(name)}</h3>
+    <span class="badge ${cls}">${esc(c.level)}</span>
+    ${c.unaided_repo ? "" :
+      '<span class="badge stale" style="margin-left:6px">no unaided repo work</span>'}
+    <div class="meter"><i style="width:${pct}%"></i></div>
+    <div class="muted" style="font-size:.72rem">${pct}% of the evidence needed</div>
+    <dl>
+      <div><dt>passes</dt><dd class="pass">${c.passes || 0}</dd></div>
+      <div><dt>fails</dt><dd class="fail">${c.fails || 0}</dd></div>
+      <div><dt>unaided</dt><dd>${c.unaided_tasks || 0}</dd></div>
+      <div><dt>repos</dt><dd>${c.projects || 0}</dd></div>
+    </dl>
+    ${c.blocked_by ? `<div class="muted" style="font-size:.72rem;margin-top:6px">
+       ⚑ ${esc(c.blocked_by)}</div>` : ""}
+  </div>`;
+}
+
+async function render() {
+  const [profile, ledger, tuts, auth] = await Promise.all([
+    getJSON("/profile"), getJSON("/ledger"), getJSON("/tutorials"),
+    getJSON("/authorship"),
+  ]);
+  const sc = await getJSON("/score").catch(() => ({concepts: {}, headline: {}}));
+
+  const who = (prefs.callsign || "").trim();
+  $("#hail").textContent = who ? `${who}'s standing` : "Grit";
+  $("#crest").textContent = (who[0] || "G").toUpperCase();
+
+  const concepts = sc.concepts || {};
+  const names = Object.keys(concepts);
+  const hl = sc.headline || {};
+  $("#s-proven").textContent = hl.proven || 0;
+  $("#s-recall").textContent = hl.recall || 0;
+  $("#s-tracked").textContent = hl.tracked || 0;
+  $("#claim").textContent = sc.note || "";
+  const t = auth.totals || {};
+  $("#a-lines").textContent = t.lines || 0;
+  $("#a-edits").textContent = t.edits || 0;
+  $("#a-shell").textContent = t.shell || 0;
+  $("#a-taken").textContent = t.taken || 0;
+  $("#claim").innerHTML =
+    "No XP, no streaks, no levels to grind &mdash; every number here is a measurement, "
+    + "and measurements can go down. A tutorial pass caps at <b>Recall</b>; only real "
+    + "repository work reaches <b>Proven</b>.";
+
+  // The only panel with real data today. It goes first, and it reports counts
+  // rather than a percentage: the human side of the diff is never observed, so
+  // any ratio shown here would be invented.
+  const ap = (auth.projects || []);
+  $("#authnote").textContent = auth.note || "";
+  $("#authorship").innerHTML = ap.length
+    ? `<table><tr><th>project</th><th>lines</th><th>edits</th><th>shell</th>
+       <th>files</th><th>offered</th><th>last</th></tr>` + ap.map(p => `<tr>
+         <td title="${esc(p.project)}">${esc(p.project.split("/").pop())}</td>
+         <td class="fail">${p.lines}</td>
+         <td>${p.edits}</td>
+         <td class="muted">${p.shell}</td>
+         <td class="muted">${p.files}</td>
+         <td class="muted">${p.offers || 0}</td>
+         <td class="muted">${esc((p.last || "").slice(0, 16).replace("T", " "))}</td>
+       </tr>` + (p.recent && p.recent.length
+         ? `<tr><td colspan="7" class="muted" style="padding-left:14px;font-size:.78rem">
+            most recent files the assistant touched &mdash; worth reading before you ship:
+            ${p.recent.map(f => `<code>${esc(f.split("/").pop())}</code>`).join(" · ")}
+            </td></tr>` : "")).join("") + `</table>`
+    : `<div class="empty"><b>Nothing recorded yet</b>
+       Install the hook and work normally &mdash; every file the assistant writes
+       lands here. <code>bin/install.sh --doctor</code> checks it is wired up.</div>`;
+
+  $("#concepts").innerHTML = names.length
+    ? names.sort().map(n => conceptCard(n, concepts[n])).join("")
+    : `<div class="empty" style="grid-column:1/-1"><b>Nothing measured yet</b>
+       Ask the assistant to start a task you will do yourself. When your check passes and
+       the assistant did not write the code, the concept lands here.</div>`;
+
+  const rows = (tuts.tutorials || []).map(t => `<tr>
+      <td><a href="/tutorial/${encodeURIComponent(t.name)}">${esc(t.name)}</a></td>
+      <td class="${t.status === "earned" ? "pass" : "muted"}">${esc(t.status)}</td>
+      <td class="muted">${esc(t.detail)}</td></tr>`).join("");
+  $("#tutorials").innerHTML = rows
+    ? `<table><tr><th>tutorial</th><th>status</th><th>detail</th></tr>${rows}</table>`
+    : `<div class="empty"><b>No tutorials yet</b>
+       Tutorials are generated per measured gap, and that generator is not built yet &mdash;
+       so nothing can appear here, and the profile above stays empty. This is the product being
+       unfinished, not you being new.</div>`;
+
+  const led = (ledger.entries || []).slice(-12).reverse().map(e => `<tr>
+      <td>${esc(e.concept)}</td>
+      <td class="${e.earned ? "pass" : "muted"}">${e.earned ? "earned" : esc(e.judgment || "pending")}</td>
+      <td class="muted">${esc(e.routing_via || "unknown")}</td>
+      <td class="muted">${esc((e.opened || "").slice(0, 19).replace("T", " "))}</td></tr>`).join("");
+  $("#ledger").innerHTML = led
+    ? `<table><tr><th>concept</th><th>outcome</th><th>routed via</th><th>opened</th></tr>${led}</table>`
+    : `<div class="empty muted">Nothing recorded yet.</div>`;
+}
+
+// The page was a snapshot: it fetched once at load and then went stale while
+// you worked, which is the wrong shape for a panel whose whole job is to show
+// what just happened. Refresh when the tab regains focus (the common case —
+// you alt-tab back after a work session) and slowly in the background.
+// Never while the onboarding dialog is open: re-rendering under someone who is
+// typing their name is worse than stale data.
+function watch() {
+  const tick = () => { if ($("#veil").hidden) render().catch(() => {}); };
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) tick();
+  });
+  setInterval(tick, 30000);
+}
+
+(async function boot() {
+  prefs = await getJSON("/preferences");
+  const health = await getJSON("/health");
+  applyTheme(prefs.theme, prefs.motion);
+  $("#rootline").innerHTML = `local daemon &middot; <code>${esc(health.root)}</code>`;
+  $("#app").hidden = false;
+  await render();                    // data first: the page must be useful
+  if (!prefs.onboarded) {            // ...then offer to personalise it
+    $("#firstrun").hidden = false;
+  }
+  watch();
+})();
+</script>
+</body>
+</html>
