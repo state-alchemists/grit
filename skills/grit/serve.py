@@ -669,10 +669,12 @@ class Handler(BaseHTTPRequestHandler):
                         "dashboard": True,
                         "tutorial_runtime": True,
                     },
-                    "not_built": ["tutorial generation"],
+                    "not_built": ["tutorial automation"],
                     "note": (
-                        "Repository tasks score today. Tutorials are a second "
-                        "evidence source and their generator is not built."
+                        "Both evidence sources work. Tutorials are written on "
+                        "demand, one concept at a time — there is no library "
+                        "and nothing pre-made, so most scores come from real "
+                        "repository tasks."
                     ),
                 },
             )

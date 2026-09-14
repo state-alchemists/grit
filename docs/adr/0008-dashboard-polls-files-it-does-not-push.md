@@ -51,7 +51,7 @@ flowchart TD
     subgraph SCORE ["④ Scoring — the product"]
         TASK["a repository task you did unaided"] --> VE["verify_edit.py<br/>git diff + authorship log"]
         VE --> EV["~/.grit/evidence.jsonl<br/>source x assistance x novelty"]
-        TUT["a completed tutorial"] -.->|generator NOT built| EV
+        TUT["a completed tutorial"] -->|written on demand| EV
         EV --> LV["per-concept level<br/>unproven / recall / proven"]
     end
 

@@ -229,7 +229,7 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
   </div>
 
   <details class="panel" id="unbuilt">
-    <summary><b>Tutorials</b> <span id="tut-summary">— generator not built yet</span></summary>
+    <summary><b>Tutorials</b> <span id="tut-summary">— none yet</span></summary>
     <h2>Tutorials</h2>
     <div id="tutorials"></div>
     <h2>Recent runs</h2>
@@ -464,17 +464,17 @@ async function render() {
   $("#tutorials").innerHTML = rows
     ? `<table><tr><th>tutorial</th><th>status</th><th>detail</th></tr>${rows}</table>`
     : `<div class="empty"><b>No tutorials yet</b>
-       Tutorials are generated per measured gap, and that generator is not built yet &mdash;
-       so nothing can appear here, and the profile above stays empty. This is the product being
-       unfinished, not you being new.</div>`;
+       There is no library to browse. A tutorial gets written for you when a gap is measured,
+       against your own code &mdash; ask for one, or do a task yourself and score it directly.
+       An empty list is the normal starting state, not a fault.</div>`;
 
-  // The summary must describe what is actually on disk. Saying "generator not
-  // built yet" directly above a real tutorial is worse than saying nothing:
-  // it tells the user their tutorial does not exist while linking to it.
+  // The summary describes what is actually on disk. Anything implying tutorials
+  // cannot exist is worse than saying nothing when one is listed right below:
+  // it tells the user their tutorial is impossible while linking to it.
   const nTuts = (tuts.tutorials || []).length;
   $("#tut-summary").textContent = nTuts
     ? `— ${nTuts} ready`
-    : "— generator not built yet";
+    : "— none yet";
   // Open automatically when there is something to show, so a delivered
   // tutorial is not hidden behind a collapsed panel the user has no reason
   // to click. Left collapsed when empty — there is nothing to reveal.

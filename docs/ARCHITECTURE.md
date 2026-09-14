@@ -187,6 +187,6 @@ No framework. Every case is a defect that actually shipped, and the comment says
 
 ## What is not built
 
-**Tutorial generation.** The runtime delivers and scores a tutorial; nothing writes one. Every score today comes from real repository tasks. The onboarding battery and the router are deferred — [ADR 0009](adr/0009-graded-score-from-capped-evidence.md) removed the need for them to exist before anything can be scored, and [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md) records what they would be if built.
+**Automation around tutorials.** The runtime delivers and scores a tutorial, and the assistant writes one on demand from the template — both verified end to end. What does not exist is anything around that: no library, no cache across machines, no batching, and no validation of a page before it is served beyond the self-test embedded in it. Each tutorial is roughly 20 KB of hand-written HTML and JavaScript, so in practice most scores come from real repository tasks. The onboarding battery and the router are deferred — [ADR 0009](adr/0009-graded-score-from-capped-evidence.md) removed the need for them to exist before anything can be scored, and [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md) records what they would be if built.
 
 And the honest ceiling, unchanged: this may **avoid harm**. Whether a `proven` concept predicts real capability has never been tested. That study is [ADR 0012](adr/0012-profile-validity-is-the-critical-path.md), and it is still unrun.

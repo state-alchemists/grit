@@ -54,7 +54,7 @@ Never promise growth. The ceiling is harm avoidance, and saying so is not modest
 
 **Deferred:** the onboarding battery and the router. [ADR 0009](adr/0009-graded-score-from-capped-evidence.md) removed the need for either to exist before anything can be scored — real tasks populate the profile directly. [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md) still governs how routing must work *if* it is built.
 
-**Not built:** tutorial generation. The runtime delivers and scores a tutorial; nothing writes one.
+**Built but unautomated:** tutorials. The assistant writes one against a measured gap and the runtime scores it; nothing batches, caches, shares or pre-validates them.
 
 **Out of scope entirely:** team or hosted features, cross-user benchmarking, a tutorial library, non-coding domains, and any claim beyond harm avoidance.
 

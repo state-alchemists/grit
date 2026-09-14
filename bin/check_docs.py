@@ -218,11 +218,6 @@ def main():
             r"(both|all three|all four|\d+) self-checks must (?:all )?pass",
             lambda m: m.group(1).lower(),
         ),
-        "tutorial generator": (
-            r"(nothing generates a tutorial|the generator does not|"
-            r"generator is (?:still )?unbuilt|there is no generator)",
-            lambda m: "unbuilt",
-        ),
     }
     for label, (pattern, norm_fn) in shared.items():
         answers = {}
@@ -238,6 +233,37 @@ def main():
                     for k, v in sorted(answers.items())
                 ),
             )
+
+    # ── 8c-bis. Claims known to be FALSE must not come back ──────────────────
+    # "nothing generates a tutorial" was repeated across five docs, the /status
+    # payload and the dashboard's empty state. It is not true: the assistant
+    # authors one from tutorial.template.html, and the loop was driven end to
+    # end on 2026-09-14 — three gates, evidence row, level. What is missing is
+    # automation around that, which is a different and much smaller claim.
+    #
+    # A cross-doc agreement check made this WORSE: every doc agreed, so nothing
+    # fired, and a file telling the truth would have been the one flagged.
+    BANNED = [
+        (r"nothing (?:generates|writes) a tutorial",
+         "the assistant writes them; say 'not automated' instead"),
+        (r"there is no (?:tutorial )?generator",
+         "the assistant is the generator; say 'no library / no automation'"),
+        (r"generator (?:is (?:still )?unbuilt|does not exist|is not built)",
+         "verified working end to end; name the missing automation instead"),
+        (r"no generator\b",
+         "verified working end to end; name the missing automation instead"),
+    ]
+    code_and_docs = [p_ for p_, _ in live_docs()]
+    code_and_docs += [ROOT / "skills" / "grit" / "serve.py",
+                      ROOT / "skills" / "grit" / "dashboard.html",
+                      ROOT / "skills" / "grit" / "SKILL.md"]
+    for p_ in code_and_docs:
+        if not p_.exists():
+            continue
+        body = p_.read_text(encoding="utf-8")
+        for pattern, why in BANNED:
+            if re.search(pattern, body, re.I):
+                add("KNOWN-FALSE CLAIM", p_.relative_to(ROOT), why)
 
     # ── 8d. Every "ADR NNNN" anywhere must name an ADR that exists ───────────
     # Renumbering the set broke two references in .py files that a docs-only
@@ -283,7 +309,7 @@ def main():
 
     # ── report ───────────────────────────────────────────────────────────────
     if not findings:
-        print("docs ok — 12 classes of claim checked against the code")
+        print("docs ok — 13 classes of claim checked against the code")
         return 0
     grouped = {}
     for kind, where, msg in findings:

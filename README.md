@@ -8,7 +8,7 @@ Learning lives at the person level (`~/.grit/`), not per project, and surfaces a
 
 The name is the thesis: grit is the opposite of friction-avoidance.
 
-> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is still missing is **tutorial generation** — the second evidence source — so today every score comes from real tasks. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/README.md). **Read [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything** — it names the assumption that everything else rests on.
+> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. The second evidence source works too: the assistant writes a tutorial against a measured gap and completing it scores. What does not exist is any **automation** of that — no library, no cache across machines, no pre-flight validation. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/README.md). **Read [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything** — it names the assumption that everything else rests on.
 
 ---
 
@@ -189,10 +189,10 @@ python3 bin/check_docs.py            # every factual claim in these docs
 
 ```
 concept level  ←  evidence.jsonl  ←  a repository task you did unaided   ✅ works today
-                                  ←  a completed tutorial                ⛔ no generator
+                                  ←  a completed tutorial                ✅ written on demand
 ```
 
-**What is missing is the second evidence source.** Nothing generates a tutorial, so every score today comes from real repository tasks. The runtime that *delivers* a tutorial works — hand-write one and completing it scores — but authoring the concept text and its differential test by hand, per concept, is the gap.
+**The second evidence source is slow, not missing.** The assistant authors a tutorial from `skills/grit/tutorial.template.html` — concept text plus a differential check — and completing it scores. That has been run end to end. What is missing is the automation around it: nothing batches or caches tutorials, nothing shares them between machines, and nothing validates a page before it is served except the self-test the assistant wrote into it.
 
 | Piece | State |
 |---|---|
@@ -200,10 +200,10 @@ concept level  ←  evidence.jsonl  ←  a repository task you did unaided   ✅
 | Scoring from real repository tasks | **works** — this is the product |
 | Daemon, gates, ledger integrity | **works** |
 | Dashboard, themes, auto-refresh | **works** |
-| Tutorial runtime | works, but nothing **generates** a tutorial |
+| Tutorial runtime, and tutorials written on demand | **works** — verified end to end |
 | Onboarding battery, router | **do not exist** — and ADR 0009 removed the need for them to exist first |
 
-Read that as: the measurement substrate is built, the product is not. The remaining build work is the tutorial generator. The remaining *risk* is validity — nothing has tested whether a `proven` concept predicts real capability, which is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md)'s question, restated for a scored profile rather than a battery.
+Read that as: the measurement substrate is built and both evidence sources work; what is thin is everything around the second one. The remaining build work is automation — batching, caching and validating tutorials rather than writing each by hand. The remaining *risk* is validity — nothing has tested whether a `proven` concept predicts real capability, which is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md)'s question, restated for a scored profile rather than a battery.
 
 ## Documentation
 
@@ -232,7 +232,7 @@ Read that as: the measurement substrate is built, the product is not. The remain
 - **DIY mode** — the assistant answers but does not write; enforced by the record, not by trust *(built)*
 - **Acceptance checks** — command/test; a task scores on a pass, not on your say-so *(built)*
 - **Dashboard** — authorship, proficiency, six themes, auto-refresh *(built)*
-- **Tutorials as a second evidence source** — the runtime exists; **the generator does not**
+- **Tutorials as a second evidence source** — the runtime and the authoring path both work *(built)*; **no automation around them**
 
 **Not in v1:** team or hosted features, non-coding domains, cross-user benchmarking, a tutorial library, and any claim beyond harm avoidance.
 

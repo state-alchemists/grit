@@ -48,7 +48,7 @@ Rejected options are documented inside the ADR that rejected them. The four most
 
 These follow from the whole set, not from any one decision:
 
-- **Repository work is the primary evidence source** ([0009](0009-graded-score-from-capped-evidence.md)). Tutorials are a second source and their generator is still unbuilt, so today the score comes from real tasks done unaided.
+- **Repository work is the primary evidence source** ([0009](0009-graded-score-from-capped-evidence.md)). Tutorials are a second source that works but is unautomated — each is written by hand, per concept — so in practice most of the score comes from real tasks done unaided.
 - **`proven` requires two distinct unaided repository tasks.** No amount of tutorial repetition reaches it, by construction.
 - **There is no router**, so adaptivity — the thing [0002](0002-withhold-guidance-by-default.md) argues guidance should have — is not implemented. The self-completion offer is uniform, which that ADR argues against. This is the largest gap between the recorded design and the running product.
 - **The product's routing would only be as good as its measurement**, which is unvalidated ([0012](0012-profile-validity-is-the-critical-path.md)). Interactive tutorials are the most guidance-dense artifact in the design, so routing error converts directly into expertise-reversal harm.

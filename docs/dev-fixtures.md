@@ -24,7 +24,7 @@ The check **always fails**, by construction. So the page can never be completed,
 
 That is fine for testing the plumbing and actively misleading as a user instruction — it was in the README and the dashboard's empty state, where it read as "here is how you get started" while handing the user something that cannot work. Removed from both on 2026-09-13.
 
-If you want a tutorial that actually passes, you have to author the concept text and write a real differential test in the `check-source` block. Doing that per concept, by hand, is the gap the tutorial generator is supposed to close — and until it exists, the learning loop has no input.
+If you want a tutorial that actually passes, you have to author the concept text and write a real differential test in the `check-source` block. Doing that per concept, by hand, is what the assistant actually does — see the tutorial section of the skill. It works; it is simply not automated, which is why this template exists as a starting point rather than a finished page.
 
 ## Running the daemon on a throwaway root
 

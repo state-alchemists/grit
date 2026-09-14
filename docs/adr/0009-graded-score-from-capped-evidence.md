@@ -7,7 +7,7 @@
 
 ## Context
 
-The product had no way to answer *"what can I do?"*. An earlier decision — *the profile is derived from the ledger by the daemon* — derived proficiency from **tutorial completions only**, and capped a tutorial pass at `recall`. With no tutorial generator, that meant deriving from an input that never arrives: `/profile` returned `{}` on every installation and would have kept doing so. The one measurement that worked, assistant authorship, fed nothing.
+The product had no way to answer *"what can I do?"*. An earlier decision — *the profile is derived from the ledger by the daemon* — derived proficiency from **tutorial completions only**, and capped a tutorial pass at `recall`. Because a tutorial has to be written by hand, per concept, that meant deriving a whole learner model from an input that costs ~20 KB of authored HTML each time: `/profile` returned `{}` on every fresh installation and stayed that way until someone sat down and wrote one. The one measurement that worked, assistant authorship, fed nothing.
 
 That earlier decision is superseded and its file is gone; what it decided is recorded below as a rejected alternative, and the parts of it that survive are named in the rationale.
 
@@ -51,7 +51,7 @@ Verified end to end:
 
 ## Consequences
 
-- **The profile can finally be populated**, from repository work alone. [ADR 0010](0010-proficiency-decays-with-inactivity.md)'s decay still applies to what accumulates; tutorials remain a second source whose generator is unbuilt.
+- **The profile can finally be populated**, from repository work alone. [ADR 0010](0010-proficiency-decays-with-inactivity.md)'s decay still applies to what accumulates; tutorials remain a second source, which works but is written by hand one concept at a time.
 - **Scoring depends on authorship verification.** `verify_edit.py` maps its verdict to `--assistance`, so the coefficient is observed rather than declared. `UNVERIFIED` maps to `full` — if nobody can prove who typed it, it does not count as theirs.
 - **The score can go down**, from failures and from ageing. That is the point; a figure that only rises is a vanity metric.
 - **The numbers are judgement, not measurement.** 0.5, 0.2, 0.3, 0.8, 1.5, two tasks — every one is a choice. They are internally consistent and defensible, and none of them is validated against whether a `proven` concept predicts real capability. That study is still ADR 0012's, still unrun.

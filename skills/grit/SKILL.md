@@ -21,7 +21,7 @@ An explicit invocation is **not** a request to start the loop — there is usual
 1. **Is it wired up?** Run `python3 <skill-dir>/doctor.py`. It lists every hook registration and whether it can actually run. It ships with this skill — you do not need the repo. If nothing is registered, say so — without a hook nothing is being recorded at all.
 2. **What has the assistant written here?** Read `<project>/.grit/authorship.jsonl`. Report lines and files written by the assistant, and shell calls whose effect was not observed. **Never report a percentage** — your own edits are not observed, so there is no denominator.
 3. **The dashboard.** Read `url` from `~/.grit/daemon.json`; start `serve.py` if nothing is listening; give them the link.
-4. **What is not built.** Tutorial *generation*. Say so plainly: scores come from real repository tasks today, and a tutorial can only score if someone hand-wrote it. An empty profile means no task has been done yet — not a malfunction.
+4. **What is thin.** Tutorials are written on demand, one at a time, by you — there is no library and nothing pre-made. Say so plainly: most scores come from real repository tasks. An empty profile means no task has been done yet, not a malfunction.
 
 Then stop. Do not offer the 1/2/3 choice, do not probe, do not create tasks. If they follow up with actual work, the rest of this file applies.
 
@@ -31,7 +31,7 @@ Then stop. Do not offer the 1/2/3 choice, do not probe, do not create tasks. If 
 
 Decline plainly, in one short paragraph, and then just help them normally. Two reasons, and give whichever is true:
 
-1. **Nothing generates tutorials yet.** That is true for every topic, coding included. If you promise a tutorial, none arrives.
+1. **A tutorial has to be written, by you, against a check that runs.** That is affordable for a coding concept in a real repository and not for a topic with no code behind it — there is nothing to check.
 2. **Ungrounded topics have no oracle.** Everything here rests on a check that runs and either passes or fails. Project management has no `npm test`. Without it the first of the three gates degrades to *"the user says they understand"* — which is the self-report this entire design exists to replace. A concept recorded as **earned** on that basis would be fiction, and one fictional row makes the whole record worthless.
 
 So: **never** create a task, a tutorial, or a ledger entry for an ungrounded request. Never record anything as earned without an executable check that actually ran.
@@ -203,7 +203,7 @@ If the justification is unsound, don't just correct it. Offer a drill on that co
 
 There is no lesson library. "Teach me X" creates a task, not a document.
 
-**There is no generator.** Writing a tutorial means *you* author it by hand from `tutorial.template.html`, beside this file — the concept text and a real differential check, per concept. Do that only against a measured gap, scoped to the user's own repository. Never promise a tutorial you are not about to write yourself, and never imply one will appear on its own.
+**You are the generator.** There is no library and no automation: writing a tutorial means *you* author it from `tutorial.template.html`, beside this file — the concept text and a real differential check, per concept. Do that only against a measured gap, scoped to the user's own repository. Never promise a tutorial you are not about to write yourself, and never imply one will appear on its own.
 
 Each one is a self-contained interactive page where the user writes code and a check runs.
 
