@@ -2,8 +2,6 @@
 
 Conventions for working in this repository that you **cannot get by reading the code**. Everything inferable from the source is deliberately absent — for what the product is read [README.md](README.md), for how it works read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), for why it is shaped this way read [docs/adr/](docs/adr/README.md).
 
-The user is **Go**. Address them that way.
-
 ---
 
 ## 1. The rules that are not negotiable

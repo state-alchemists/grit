@@ -36,7 +36,8 @@ def guarded(hook_path):
     The path is shell-quoted, which is why shell form is safe here despite
     spaces — exec form would be immune to spaces but cannot carry the guard.
     """
-    return "python3 " + shlex.quote(hook_path) + " || exit 0"
+    
+    return sys.executable + " " + shlex.quote(hook_path) + " || exit 0"
 
 
 def _load(path):
