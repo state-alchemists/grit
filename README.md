@@ -209,6 +209,7 @@ Read that as: the measurement substrate is built, the product is not. The remain
 
 | Path | What it is |
 |------|-----------|
+| [AGENTS.md](AGENTS.md) | **Conventions for working here** — the ones you cannot infer from the code |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **How it works** — the three processes, the files, the invariants |
 | [docs/DESIGN.md](docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, the privacy boundary, what is unproven |
 | [docs/adr/](docs/adr/README.md) | **Decision records** — why the design is this way, and what was rejected |
