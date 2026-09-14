@@ -13,16 +13,108 @@ as ours, and leave a file we emptied no worse than we found it.
 Usage: _wire_hook.py <claude|zrb> <config-path> <hook-path> <install|remove>
 """
 
+from __future__ import annotations
+
 import json
 import os
 import shlex
 import shutil
 import sys
+from typing import Any, Callable
 
 MARKER = "grit-hook.py"  # how we recognise our own entries on re-run
 
+# One runtime's writer: takes (config path, hook path, action) and returns the
+# merged config it wrote.
+Writer = Callable[[str, str, str], Any]
 
-def guarded(hook_path):
+
+def main() -> None:
+    if len(sys.argv) != 5:
+        # The docstring above promises a usage line, so running it by hand has
+        # to produce one. Without this a bare call raises ValueError before any
+        # message is printed, which looks like a broken install script.
+        sys.stderr.write(
+            "usage: _wire_hook.py <claude|zrb> <config-path> <hook-path> "
+            "<install|remove>\n"
+        )
+        sys.exit(2)
+    runtime, path, hook, action = sys.argv[1:5]
+    handler: Writer = {"claude": claude, "zrb": zrb}[runtime]
+    handler(path, hook, action)
+    if os.path.exists(path):
+        print(
+            "  %s  %s" % ("registered" if action == "install" else "unregistered", path)
+        )
+
+
+def claude(path: str, hook: str, action: str) -> Any:
+    data = _load(path)
+    if data is None:
+        data = {}
+    hooks = data.setdefault("hooks", {})
+    pre = hooks.setdefault("PreToolUse", [])
+    pre[:] = [g for g in pre if not _is_ours(g)]
+    if action == "install":
+        pre.extend(_claude_entries(guarded(hook)))
+    if not pre:
+        hooks.pop("PreToolUse", None)
+    if not hooks:
+        data.pop("hooks", None)
+    _write(path, data, empty={})
+    return data
+
+
+def _load(path: str) -> Any:
+    if not os.path.exists(path):
+        return None
+    shutil.copy2(path, path + ".grit-backup")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except json.JSONDecodeError:
+        print("  %s is not valid JSON — leaving it alone" % path, file=sys.stderr)
+        sys.exit(3)
+
+
+def _is_ours(group: dict[str, Any]) -> bool:
+    """Match on args too: the handler moved from shell form
+    ("python3 /path/grit-hook.py") to exec form ("python3", ["/path/..."]), and
+    an upgrade must still recognise the entry it is replacing."""
+    return any(
+        MARKER in h.get("command", "")
+        or any(MARKER in a for a in h.get("args", []))
+        for h in group.get("hooks", [])
+    )
+
+
+def _claude_entries(command: str) -> list[dict[str, Any]]:
+    """The two registrations we write: real edits, and shell calls.
+
+    Exec form (`args` present) is what the docs recommend whenever the hook
+    references a path, because each element is passed as one argument with no
+    quoting — shell form would break on a path containing spaces. The command
+    here is still a single shell string because it must carry the `|| exit 0`
+    guard, which exec form cannot express.
+    """
+    handler = {"type": "command", "command": command, "timeout": 5}
+    return [
+        {
+            # Real edits: recorded exactly, and they trigger the one prompt.
+            "matcher": "Write|Edit|NotebookEdit",
+            "hooks": [handler],
+        },
+        {
+            # Shell calls: recorded as opaque. Without this, an assistant that
+            # writes through `python3 - <<EOF` or `sed -i` leaves no trace and
+            # the work reads as human-written.
+            "matcher": "Bash|PowerShell",
+            "hooks": [handler],
+        },
+    ]
+
+
+def guarded(hook_path: str) -> str:
     """The command to register, wrapped so it can never block a tool call.
 
     Python exits 2 when it cannot open a script file, and 2 is exactly the exit
@@ -36,23 +128,10 @@ def guarded(hook_path):
     The path is shell-quoted, which is why shell form is safe here despite
     spaces — exec form would be immune to spaces but cannot carry the guard.
     """
-    
     return sys.executable + " " + shlex.quote(hook_path) + " || exit 0"
 
 
-def _load(path):
-    if not os.path.exists(path):
-        return None
-    shutil.copy2(path, path + ".grit-backup")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return json.load(fh)
-    except json.JSONDecodeError:
-        print("  %s is not valid JSON — leaving it alone" % path, file=sys.stderr)
-        sys.exit(3)
-
-
-def _write(path, data, empty):
+def _write(path: str, data: Any, empty: Any) -> None:
     """Write, or delete the file if we emptied something we alone populated."""
     if data == empty and os.path.exists(path):
         os.remove(path)
@@ -69,54 +148,7 @@ def _write(path, data, empty):
     os.replace(tmp, path)
 
 
-def claude(path, hook, action):
-    data = _load(path)
-    if data is None:
-        data = {}
-    hooks = data.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-
-    def ours(group):
-        # Match on args too: the handler moved from shell form
-        # ("python3 /path/grit-hook.py") to exec form ("python3", ["/path/..."]),
-        # and an upgrade must still recognise the entry it is replacing.
-        return any(
-            MARKER in h.get("command", "")
-            or any(MARKER in a for a in h.get("args", []))
-            for h in group.get("hooks", [])
-        )
-
-    pre[:] = [g for g in pre if not ours(g)]
-    if action == "install":
-        # Exec form (`args` present): the docs recommend it whenever the hook
-        # references a path, because each element is passed as one argument
-        # with no quoting — shell form would break on a path containing spaces.
-        handler = {"type": "command", "command": guarded(hook), "timeout": 5}
-        pre.append(
-            {
-                # Real edits: recorded exactly, and they trigger the one prompt.
-                "matcher": "Write|Edit|NotebookEdit",
-                "hooks": [handler],
-            }
-        )
-        pre.append(
-            {
-                # Shell calls: recorded as opaque. Without this, an assistant that
-                # writes through `python3 - <<EOF` or `sed -i` leaves no trace and
-                # the work reads as human-written.
-                "matcher": "Bash|PowerShell",
-                "hooks": [handler],
-            }
-        )
-    if not pre:
-        hooks.pop("PreToolUse", None)
-    if not hooks:
-        data.pop("hooks", None)
-    _write(path, data, empty={})
-    return data
-
-
-def zrb(path, hook, action):
+def zrb(path: str, hook: str, action: str) -> Any:
     data = _load(path)
     if data is None:
         data = []
@@ -145,16 +177,6 @@ def zrb(path, hook, action):
         )
     _write(path, data, empty=[])
     return data
-
-
-def main():
-    runtime, path, hook, action = sys.argv[1:5]
-    handler = {"claude": claude, "zrb": zrb}[runtime]
-    handler(path, hook, action)
-    if os.path.exists(path):
-        print(
-            "  %s  %s" % ("registered" if action == "install" else "unregistered", path)
-        )
 
 
 if __name__ == "__main__":

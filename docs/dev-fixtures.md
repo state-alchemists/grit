@@ -37,8 +37,8 @@ python3 skills/grit/serve.py --root /tmp/grit-scratch --port 0
 ## The self-checks
 
 ```sh
-python3 skills/grit/test_serve.py      # 6 integrity properties
-python3 hooks/test_hook.py             # 15 hook properties
+python3 skills/grit/test_serve.py      # 13 integrity properties
+python3 hooks/test_hook.py             # 16 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 ```
 

@@ -25,8 +25,8 @@ Conventions for working in this repository that you **cannot get by reading the 
 Almost every defect in this repository's history was found by executing something, and missed by reading it. Reading finds the bug you were already looking for.
 
 ```sh
-python3 skills/grit/test_serve.py      # 6 integrity properties
-python3 hooks/test_hook.py             # 15 hook properties
+python3 skills/grit/test_serve.py      # 13 integrity properties
+python3 hooks/test_hook.py             # 16 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
@@ -60,6 +60,8 @@ A comment earns its place by **changing what the next edit does**. Keep the non-
 **The test files are the deliberate exception.** Every case in `test_serve.py`, `test_hook.py` and `score.py selftest` is a defect that actually shipped, and the comment names which one. That comment is the point: it is what makes a future edit that reintroduces the bug fail *loudly* instead of quietly re-earning concepts nobody earned. Never strip them for terseness.
 
 New tests follow the same shape. A test here is a **property**, named for what breaks if it fails — not `test_record_3`.
+
+**Define the caller before the callee, where practical.** Read top to bottom, entry point first, in the order the code actually runs. This was briefly an AST checker under bin/, deleted for enforcing pure taste with a 168-line call-graph walker that drove a whole rewrite and wasn't wired into anything. Keep the convention, drop the tooling — this is a code-review preference, not a build gate, and "where practical" means mutual recursion and shared helpers are exempt.
 
 ---
 

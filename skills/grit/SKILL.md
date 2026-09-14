@@ -214,6 +214,13 @@ Three properties that must survive every edit:
 - **The self-test must be able to fail.** Assert that the reference implementation passes *and* that known-wrong ones fail. A self-test that only checks the happy path proves nothing.
 - **Passing in the sandbox is weaker than passing in the repository.** Say so. A sandbox exercise shows recall of a concept; it does not show they can implement it in their own stack. Never present the two as equivalent.
 
+**Writing the explanation itself**, not just the mechanism around it:
+
+- **Ground it in their own code.** Name the real file, function or line the gap came from. An explanation that could belong to any codebase teaches nothing about why *this one* bit them — that specificity is the whole advantage a generated tutorial has over a generic one. If you cannot point at the line, the gap was not scoped narrowly enough to write this yet.
+- **Mechanism before terminology.** Start from the concrete failure the gap would cause, then name the concept — not the other way around. A reader who cannot yet name it should still be able to follow the explanation.
+- **The task and the check must exercise the same mechanism as the explanation.** A task completable without touching that mechanism, or a check narrower than the task describes, teaches the wrong thing.
+- **Calibrate to their actual preference, not the template's defaults.** Read `depth` and `format` from `~/.grit/preferences.json` and set `tutorial.template.html`'s `const prefs` to those real values — the template ships with `{depth: "standard", format: "socratic"}` as the daemon's own default, not a placeholder meaning "use whatever the user has." Leaving it as-is silently ignores whatever they actually asked for.
+
 ---
 
 ## The companion daemon
@@ -238,7 +245,8 @@ What you need to know to use it correctly:
 
 **Copy the command the daemon printed to its own terminal** — it already contains the correct address and token. Do not assemble your own from memory; the port may not be the default.
 
-The tutorial page cannot reach that route — by design, so a page cannot pass itself. If you ever find you *can* judge with a credential the page also holds, stop and report it; something is broken.
+The tutorial page cannot reach that route — by design, so a page cannot pass itself.
+- **If you can ever judge with a credential the page also holds, stop and report it.** That is the one property the whole design rests on: with a shared credential the page could award itself the third gate, which makes "the page never writes the record" true in letter and worthless in fact. It is a security failure, not a bug to work around — do not proceed with the session, and do not silently compensate by being more careful. Say what you observed.
 - **You get one verdict. Gate 3 appends; it does not replace.** Decide before you POST and write the real reasoning the first time — a second call returns `409` with the standing verdict, records your attempt as a visible amendment, and changes nothing. A verdict you can overwrite is not evidence. If you cast the wrong one, say so plainly and offer a fresh attempt at the tutorial; that opens a new session and produces new evidence. Never imply you can correct the record.
 - **Earned is derived, never declared.** All three gates present, check still passing, judgment sound. Don't describe a concept as earned on any weaker basis.
 - `~/.grit/tutorials/` starts empty. That is correct — nothing ships a library, and nothing fills it on its own; a tutorial exists only once someone has authored one against a measured gap.
@@ -266,6 +274,7 @@ Run `python3 <skill-dir>/test_serve.py` before trusting the daemon after a chang
 - **Never claim skill gain.** Avoiding harm is the ceiling.
 - **Never assert authorship you did not verify.** `verify_edit.py` reports what can be proven; "the user wrote this" is not something you can know by remembering.
 - **Never present a sandbox pass as a repository pass.**
+- **If the page's credential can ever cast the third gate, stop.** The two-token split is what makes the record trustworthy; a page that can judge itself makes every ledged entry meaningless. Report it rather than working around it.
 - **Option 3 means stop.** No tracking, no measuring, no nudging.
 - **Say what is unproven.** Whether the profile actually predicts real-world proficiency has not been tested. If the user asks whether this works, the honest answer is that the underlying mechanism is well-supported and this product's own effect has not been measured.
 - **Keep internal engineering history out of what the user sees.** Decision records live in the project's `docs/` for contributors. Never cite them in conversation, in an error message, or in anything rendered on screen. Explain the reason itself if it matters; drop it if it doesn't.

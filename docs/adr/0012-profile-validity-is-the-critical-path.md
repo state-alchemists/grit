@@ -7,6 +7,8 @@
 
 > **Restatement note.** This ADR was written as *"Battery validity is the critical path"*, when the onboarding battery was the only instrument. [ADR 0009](0009-graded-score-from-capped-evidence.md) replaced the battery with a score derived from observed work, and [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) deferred the battery indefinitely. **The instrument changed; the question did not.** It is restated here against the thing that actually ships.
 
+> **Progress note.** `bin/study_report.py` computes Q1, Q2 and Q2b retrospectively from an existing `evidence.jsonl` — no new instrumentation was needed, because every unaided repository event already carries its own later outcome (its `failed` flag). This does not answer the questions; it only means the answer is a command away once enough real usage has accumulated. Status stays **unrun**: a first look at one person's own log is not the study, which still needs the ≥5-tasks-per-condition, preregistered, multi-week design under "Method constraints" below.
+
 ## Context
 
 Every decision in this repository depends on one unverified assumption: **that the level a concept carries predicts real-work proficiency.**
@@ -70,7 +72,7 @@ Adapted from the single-case-study methods review:
 
 - **Positive**: the highest-risk assumption is named, and the data needed to test it is already being collected rather than waiting on a build.
 - **Negative**: the product ships levels it cannot yet justify. This is mitigated by saying so — in the README, in `DESIGN.md`, and in what the assistant is permitted to claim — and not otherwise.
-- **Negative**: an N=1 study cannot distinguish "the score is invalid" from "the score is invalid for me." The version worth running later — 10–20 developers, measuring unassisted outcomes against recorded levels — is a weekend of work and has not been run by anyone in this space.
+- **Negative**: an N=1 study cannot distinguish "the score is invalid" from "the score is invalid for me." The version worth running later — 10–20 developers, measuring unassisted outcomes against recorded levels — is a weekend of work and has not been run by anyone in this space. This is deliberately weaker evidence than the multi-subject studies the README cites to motivate the product at all (Bastani et al., N≈1000; METR, N=16 developers × 246 tasks) — a result from this study is a first signal about this design, not a replication at their strength, and must not be reported or cited as if it were.
 - **Follow-ups**: if Q1 fails, [ADR 0002](0002-withhold-guidance-by-default.md), [0009](0009-graded-score-from-capped-evidence.md), [0010](0010-proficiency-decays-with-inactivity.md) and [0011](0011-routing-on-a-measured-profile-deferred.md) all require revision, and the product reduces to [ADR 0001](0001-measure-the-effect.md).
 
 ## Backlinks

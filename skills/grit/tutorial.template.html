@@ -84,7 +84,10 @@
     background: #131317; border: 1px solid var(--border); border-radius: 6px;
     padding: 14px; overflow-x: auto; font: 13px/1.55 var(--mono); margin: 0;
   }
-  /* Preference-driven presentation. The core interaction is fixed. */
+  /* Preference-driven presentation. The core interaction is fixed. The BODY
+     attributes below are inert defaults — `const prefs` further down is the
+     one place that actually sets them at load, so that is the one to edit;
+     changing only these two attributes would silently do nothing. */
   body[data-depth="minimal"] .depth-deep { display: none; }
   body[data-depth="deep"] .depth-minimal { display: none; }
   body[data-format="terse"] .format-prose { display: none; }
@@ -107,18 +110,31 @@
     <p class="muted">Do not trust a pass below. Report this; the tutorial needs regenerating.</p>
   </div>
 
-  <!-- ── Gap-triggered narrative. Present only because the concept was measured unfamiliar. ── -->
+  <!-- ── Gap-triggered narrative. Present only because the concept was measured unfamiliar. ──
+       Ground every sentence in the user's OWN code: name the real file, function or variable
+       this gap came from. A correct explanation that could belong to any codebase teaches
+       nothing about why this one bit them — that specificity is the entire reason a generated
+       tutorial can beat a generic one. ── -->
   <div class="panel">
     <h2>The concept</h2>
-    <p class="depth-deep"><!-- One paragraph: the mechanism, from first principles. --></p>
-    <p class="depth-minimal format-prose"><!-- One sentence: what it is and why it bites. --></p>
-    <p class="format-prose"><!-- Why it matters in *this* repo, at *this* point. Real files. --></p>
+    <p class="depth-deep"><!-- One paragraph: start from the failure this gap would cause in
+         their own code if left unfixed, then name the mechanism that causes it. Mechanism
+         before terminology — a reader who could not yet name the concept must still be able
+         to follow the paragraph. --></p>
+    <p class="depth-minimal format-prose"><!-- One sentence: what it is and why it bites. Say
+         what breaks, not what the concept is called. --></p>
+    <p class="format-prose"><!-- Why it matters in *this* repo, at *this* point. Real files,
+         real names — never "imagine a service that...". If you cannot point at the exact
+         line this gap came from, the gap was not scoped narrowly enough to write this yet. --></p>
   </div>
 
   <!-- ── The exercise: the mechanism, not decoration. ── -->
   <div class="panel">
     <h2>Your task</h2>
-    <p><!-- TASK: what to implement, stated as a requirement, not as steps. --></p>
+    <p><!-- TASK: what to implement, stated as a requirement, not as steps. It must exercise
+         the SAME mechanism as the concept paragraph above and the differential check below —
+         a task that can be completed without touching that mechanism, or a check that tests
+         something narrower than the task describes, teaches the wrong thing. --></p>
     <p class="muted">
       Edit the function below. The check runs in a worker; your code cannot see the tests.
     </p>
@@ -219,6 +235,11 @@ function solve(...args) {
 const SOLUTION = null; // string | null — reference, for differential testing
 
 // ── Preference layer: presentation only, never the mechanism ──────
+// REPLACE these two values with the user's actual saved `depth`/`format` from
+// ~/.grit/preferences.json when authoring — "standard"/"socratic" here are the
+// daemon's defaults, not a placeholder meaning "use whatever". Leaving the
+// defaults in place for a user who set something else silently ignores their
+// preference; the CSS above only works if this object carries their real one.
 const prefs = { depth: "standard", format: "socratic" };
 document.body.dataset.depth = prefs.depth;
 document.body.dataset.format = prefs.format;

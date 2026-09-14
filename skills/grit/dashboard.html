@@ -124,6 +124,17 @@ h2{font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.14e
 .node dl div{display:flex;gap:5px}
 .node dt{opacity:.75}
 
+/* Fires once when a concept's level improves between polls (render() tracks
+   PREV_LEVELS and adds this class; it removes itself on animationend, never
+   on a timer, so it can never get stuck showing). [data-motion="off"] already
+   kills all animation globally (line 65) — nothing extra needed here for the
+   existing motion toggle to cover this. */
+@keyframes level-up{
+  0%{box-shadow:0 0 0 0 var(--accent)} 40%{box-shadow:0 0 22px 4px var(--accent)}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+.node.just-leveled{animation:level-up 900ms ease-out}
+
 /* ── Tables ── */
 table{width:100%;border-collapse:collapse}
 td,th{padding:8px 10px 8px 0;border-bottom:1px solid var(--border);font-size:.87rem;
@@ -201,8 +212,20 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <button class="ghost" id="settings">Settings</button>
   </header>
 
+  <div class="panel" id="allempty" hidden style="border-color:var(--accent)">
+    <h2>Start here</h2>
+    <p style="margin-top:0">Nothing has been measured yet. Two ways to change that:
+       ask the assistant for <b>a task you do yourself</b> — write the code, pass the
+       check, and the concept lands below — or ask for <b>a tutorial</b> against a
+       measured gap, which caps at <i>recall</i> but still counts.</p>
+  </div>
+
   <div class="panel">
     <h2>Written by the assistant</h2>
+    <div class="empty fail" id="hookwarn" hidden><b>Authorship isn't being enforced on this machine.</b>
+       No grit hook is registered and runnable here, so <code>verify_edit.py</code> will report
+       <code>UNVERIFIED</code> rather than <code>HUMAN-WRITTEN</code> for work done from now on.
+       Run <code>bin/install.sh --doctor</code> to see why.</div>
     <div class="standing">
       <div class="tallies">
         <div class="tally unproven"><b id="a-lines">0</b><span>lines</span></div>
@@ -218,6 +241,7 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
   <div class="panel">
     <h2>Proficiency</h2>
     <div class="standing">
+      <div class="ring" id="ring"><i><b id="ring-pct">0%</b><small>proven</small></i></div>
       <div class="tallies">
         <div class="tally proven"><b id="s-proven">0</b><span>proven</span></div>
         <div class="tally recall"><b id="s-recall">0</b><span>recall</span></div>
@@ -370,11 +394,17 @@ $("#ob-save").onclick = async () => {
 
 // ── Render ──────────────────────────────────────────────────────────────────
 const CLS = {proven: "strong", recall: "recall", unproven: "weak"};
+const LEVEL_RANK = {unproven: 0, recall: 1, proven: 2};
+// Compared against on every render after the first to trigger `.just-leveled`
+// (see the @keyframes rule) — never on the first render, so opening the
+// dashboard doesn't pulse every concept you already had.
+let PREV_LEVELS = {};
+let FIRST_RENDER = true;
 
-function conceptCard(name, c) {
+function conceptCard(name, c, justLeveled) {
   const cls = CLS[c.level] || "weak";
   const pct = Math.round((c.score || 0) * 100);
-  return `<div class="node lv-${cls}">
+  return `<div class="node lv-${cls}${justLeveled ? " just-leveled" : ""}">
     <h3>${esc(name)}</h3>
     <span class="badge ${cls}">${esc(c.level)}</span>
     ${c.unaided_repo ? "" :
@@ -416,22 +446,38 @@ async function render() {
   $("#s-proven").textContent = hl.proven || 0;
   $("#s-recall").textContent = hl.recall || 0;
   $("#s-tracked").textContent = hl.tracked || 0;
-  $("#claim").textContent = sc.note || "";
+  const ringPct = hl.tracked ? Math.round((hl.proven || 0) / hl.tracked * 100) : 0;
+  $("#ring").style.setProperty("--pct", ringPct);
+  $("#ring-pct").textContent = ringPct + "%";
   const t = auth.totals || {};
   $("#a-lines").textContent = t.lines || 0;
   $("#a-edits").textContent = t.edits || 0;
   $("#a-shell").textContent = t.shell || 0;
   $("#a-taken").textContent = t.taken || 0;
+  // The fixed line is the claim; `sc.note` is the model's own explanation of
+  // how the level is derived, and it is shown after it rather than dropped.
   $("#claim").innerHTML =
     "No XP, no streaks, no levels to grind &mdash; every number here is a measurement, "
     + "and measurements can go down. A tutorial pass caps at <b>Recall</b>; only real "
     + "repository work reaches <b>Proven</b>.";
+  if (sc.note) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.style.fontSize = ".8rem";
+    note.style.marginTop = "8px";
+    note.textContent = sc.note;
+    $("#claim").appendChild(note);
+  }
 
   // The only panel with real data today. It goes first, and it reports counts
   // rather than a percentage: the human side of the diff is never observed, so
   // any ratio shown here would be invented.
   const ap = (auth.projects || []);
   $("#authnote").textContent = auth.note || "";
+  // `hook_active` is a tri-state from the daemon: true/false/null (unknown on
+  // error). Only an explicit false shows the warning — null must read as "we
+  // don't know", never as a false "you are unprotected".
+  $("#hookwarn").hidden = auth.hook_active !== false;
   $("#authorship").innerHTML = ap.length
     ? `<table><tr><th>project</th><th>lines</th><th>edits</th><th>shell</th>
        <th>files</th><th>offered</th><th>last</th></tr>` + ap.map(p => `<tr>
@@ -451,16 +497,33 @@ async function render() {
        Install the hook and work normally &mdash; every file the assistant writes
        lands here. <code>bin/install.sh --doctor</code> checks it is wired up.</div>`;
 
+  const justLeveled = new Set();
+  if (!FIRST_RENDER) {
+    for (const n of names) {
+      const rank = LEVEL_RANK[concepts[n].level] || 0;
+      const prev = PREV_LEVELS[n];
+      const prevRank = prev === undefined ? -1 : (LEVEL_RANK[prev] || 0);
+      if (rank > 0 && rank > prevRank) justLeveled.add(n);
+    }
+  }
   $("#concepts").innerHTML = names.length
-    ? names.sort().map(n => conceptCard(n, concepts[n])).join("")
+    ? names.sort().map(n => conceptCard(n, concepts[n], justLeveled.has(n))).join("")
     : `<div class="empty" style="grid-column:1/-1"><b>Nothing measured yet</b>
        Ask the assistant to start a task you will do yourself. When your check passes and
        the assistant did not write the code, the concept lands here.</div>`;
+  for (const n of names) PREV_LEVELS[n] = concepts[n].level;
+  FIRST_RENDER = false;
 
   const rows = (tuts.tutorials || []).map(t => `<tr>
       <td><a href="/tutorial/${encodeURIComponent(t.name)}">${esc(t.name)}</a></td>
       <td class="${t.status === "earned" ? "pass" : "muted"}">${esc(t.status)}</td>
       <td class="muted">${esc(t.detail)}</td></tr>`).join("");
+  // Onboarding (#firstrun) already says this once, on the very first load, and
+  // is dismissible for good. A user who dismisses it and then never acts sees
+  // nothing again — this one is data-driven instead: it shows on every visit
+  // where all three panels are still empty, and clears itself the moment any
+  // one of them has something in it.
+  $("#allempty").hidden = !(prefs.onboarded && !ap.length && !names.length && !rows);
   $("#tutorials").innerHTML = rows
     ? `<table><tr><th>tutorial</th><th>status</th><th>detail</th></tr>${rows}</table>`
     : `<div class="empty"><b>No tutorials yet</b>

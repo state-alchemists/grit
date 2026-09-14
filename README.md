@@ -175,8 +175,8 @@ python3 skills/grit/serve.py --root ~/.grit --stop     # stop it
 Open the URL it prints. You will get the onboarding gate and a dashboard with **nothing in it**, which is the honest state — see below for why.
 
 ```bash
-python3 skills/grit/test_serve.py    # 6 integrity properties
-python3 hooks/test_hook.py           # 15 hook properties
+python3 skills/grit/test_serve.py    # 13 integrity properties
+python3 hooks/test_hook.py           # 16 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 bin/check_docs.py            # every factual claim in these docs
 ```
@@ -248,4 +248,4 @@ Read that as: the measurement substrate is built and both evidence sources work;
 
 ## License
 
-Not yet chosen.
+MIT — see [LICENSE](LICENSE).
