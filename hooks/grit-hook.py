@@ -48,7 +48,7 @@ SHELL_TOOLS = ("Bash", "PowerShell")
 
 def _lines(tool_input):
     """How many lines the assistant is about to write."""
-    text = tool_input.get("content")            # Write
+    text = tool_input.get("content")  # Write
     if text is None:
         text = tool_input.get("new_string", "")  # Edit
     return len(str(text).splitlines())
@@ -56,8 +56,7 @@ def _lines(tool_input):
 
 def _prefs():
     try:
-        with open(os.path.join(HOME_ROOT, "preferences.json"),
-                  encoding="utf-8") as fh:
+        with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
             return json.load(fh)
     except Exception:
         return {}
@@ -81,9 +80,11 @@ def _duplicate(event):
     # the case we are trying to detect.
     body = str(tool_input.get("content") or tool_input.get("new_string", ""))
     key = "%s|%s|%s|%s" % (
-        event.get("session_id", ""), event.get("tool_name", ""),
+        event.get("session_id", ""),
+        event.get("tool_name", ""),
         tool_input.get("file_path", ""),
-        hashlib.sha1(body.encode("utf-8", "replace")).hexdigest())
+        hashlib.sha1(body.encode("utf-8", "replace")).hexdigest(),
+    )
     path = os.path.join(HOME_ROOT, ".last-event")
     now = time.time()
     try:
@@ -105,7 +106,7 @@ def _already_asked(session_id):
     """One ask per session. The marker lives with the user's own state, not the
     project, so it survives switching between repos in one session."""
     if not session_id:
-        return True                              # no id -> never nag
+        return True  # no id -> never nag
     marker_dir = os.path.join(HOME_ROOT, "asked")
     marker = os.path.join(marker_dir, str(session_id)[:64].replace("/", "_"))
     if os.path.exists(marker):
@@ -126,7 +127,8 @@ def main():
 
     cwd = event.get("cwd") or os.getcwd()
     if os.environ.get("GRIT_OFF") == "1" or os.path.exists(
-            os.path.join(cwd, ".grit", "off")):
+        os.path.join(cwd, ".grit", "off")
+    ):
         return
 
     # One event, one record — even when two registrations both match it.
@@ -139,8 +141,9 @@ def main():
     try:
         grit_dir = os.path.join(cwd, ".grit")
         os.makedirs(grit_dir, exist_ok=True)
-        with open(os.path.join(grit_dir, "authorship.jsonl"), "a",
-                  encoding="utf-8") as fh:
+        with open(
+            os.path.join(grit_dir, "authorship.jsonl"), "a", encoding="utf-8"
+        ) as fh:
             row = {
                 "at": datetime.now(timezone.utc).isoformat(),
                 "author": "assistant",
@@ -170,7 +173,7 @@ def main():
             with open(reg, "w", encoding="utf-8") as fh:
                 json.dump(known[-50:], fh, indent=2)
     except Exception:
-        pass          # recording must never cost the user an edit
+        pass  # recording must never cost the user an edit
 
     # ── 2. Ask, once per session — on real edits only. ───────────────────────
     # Bash is recorded but never prompts: most shell calls are reads and builds,
@@ -193,29 +196,42 @@ def main():
     # followed in this session" is a sound inference, and it is the only
     # evidence this product has that anyone ever chose to do the work.
     try:
-        with open(os.path.join(cwd, ".grit", "authorship.jsonl"), "a",
-                  encoding="utf-8") as fh:
-            fh.write(json.dumps({
-                "at": datetime.now(timezone.utc).isoformat(),
-                "author": "grit",
-                "event": "offered",
-                "session": event.get("session_id", ""),
-                "file": tool_input.get("file_path", ""),
-            }) + "\n")
+        with open(
+            os.path.join(cwd, ".grit", "authorship.jsonl"), "a", encoding="utf-8"
+        ) as fh:
+            fh.write(
+                json.dumps(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "author": "grit",
+                        "event": "offered",
+                        "session": event.get("session_id", ""),
+                        "file": tool_input.get("file_path", ""),
+                    }
+                )
+                + "\n"
+            )
     except Exception:
         pass
 
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "ask",
-        "permissionDecisionReason": (
-            "grit: about to write %s for you.\n"
-            "Approve to let it. Or reject and say \"I'll do it\" — the "
-            "assistant will break the work into steps, stay out of the way, "
-            "and check your result.\n"
-            "This asks once per session. Silence it with: touch .grit/off"
-            % name),
-    }}))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": (
+                        "grit: about to write %s for you.\n"
+                        'Approve to let it. Or reject and say "I\'ll do it" — the '
+                        "assistant will break the work into steps, stay out of the way, "
+                        "and check your result.\n"
+                        "This asks once per session. Silence it with: touch .grit/off"
+                        % name
+                    ),
+                }
+            }
+        )
+    )
 
 
 def _log_failure(exc):
@@ -227,10 +243,13 @@ def _log_failure(exc):
     """
     try:
         os.makedirs(HOME_ROOT, exist_ok=True)
-        with open(os.path.join(HOME_ROOT, "hook-errors.log"), "a",
-                  encoding="utf-8") as fh:
-            fh.write("%s  %s: %s\n" % (datetime.now(timezone.utc).isoformat(),
-                                       type(exc).__name__, exc))
+        with open(
+            os.path.join(HOME_ROOT, "hook-errors.log"), "a", encoding="utf-8"
+        ) as fh:
+            fh.write(
+                "%s  %s: %s\n"
+                % (datetime.now(timezone.utc).isoformat(), type(exc).__name__, exc)
+            )
     except Exception:
         pass
 
@@ -238,6 +257,6 @@ def _log_failure(exc):
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:   # never stop someone editing a file
+    except Exception as exc:  # never stop someone editing a file
         _log_failure(exc)
     sys.exit(0)

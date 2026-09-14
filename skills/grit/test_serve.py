@@ -24,10 +24,12 @@ import serve  # noqa: E402
 
 def _post(base, path, obj):
     req = urllib.request.Request(
-        base + path, data=json.dumps(obj).encode(),
-        headers={"Content-Type": "application/json"})
+        base + path,
+        data=json.dumps(obj).encode(),
+        headers={"Content-Type": "application/json"},
+    )
     try:
-        resp = urllib.request.urlopen(req)      # one request, not two
+        resp = urllib.request.urlopen(req)  # one request, not two
         return resp.getcode(), json.load(resp)
     except urllib.error.HTTPError as exc:
         return exc.code, json.loads(exc.read() or b"{}")
@@ -64,14 +66,16 @@ def main():
         _post(base, "/tutorial/%s/justification" % tok, {"answer": "because..."})
         code, body = _post(base, "/tutorial/%s/judgment" % tok, {"judgment": "sound"})
         assert code == 403, "page must not reach gate 3, got %s" % code
-        assert _get(base, "/ledger")["entries"][-1]["earned"] is False, \
-            "page self-judged its way to earned"
+        assert (
+            _get(base, "/ledger")["entries"][-1]["earned"] is False
+        ), "page self-judged its way to earned"
 
         # The judge token, which never reaches the browser, does work.
         judge_tok = next(k for k, v in state.judge_index.items() if v == tok)
         _post(base, "/judgment/%s" % judge_tok, {"judgment": "sound"})
-        assert _get(base, "/ledger")["entries"][-1]["earned"] is True, \
-            "assistant's judgment should close the third gate"
+        assert (
+            _get(base, "/ledger")["entries"][-1]["earned"] is True
+        ), "assistant's judgment should close the third gate"
 
         # ── 2. `earned` cannot outlive a passing check ───────────────────────
         # Shipped bug: judge() assigned earned=True independently of the check,
@@ -86,11 +90,13 @@ def main():
         # and the score never heard about it, so finishing a tutorial moved
         # nothing. Proficiency itself is score.py's job and tested there.
         prof = _get(base, "/profile")
-        assert "tb" in prof["concepts"], \
+        assert "tb" in prof["concepts"], (
             "an earned tutorial must produce evidence, got %s" % prof
+        )
         assert prof["concepts"]["tb"]["level"] in ("unproven", "recall"), prof
-        assert prof["concepts"]["tb"]["unaided_tasks"] == 0, \
-            "a sandbox pass is not repository work"
+        assert (
+            prof["concepts"]["tb"]["unaided_tasks"] == 0
+        ), "a sandbox pass is not repository work"
 
         # ── 4. No raw credential is readable from the ledger ─────────────────
         # Shipped bug: entries carried the live session token, and /ledger was
@@ -109,8 +115,10 @@ def main():
         j_un = next(k for k, v in state.judge_index.items() if v == t_un)
         _post(base, "/judgment/%s" % j_un, {"judgment": "unsound"})
         import score as _score
-        fails = [e for e in _score.load(root)
-                 if e.get("concept") == "tb" and e.get("failed")]
+
+        fails = [
+            e for e in _score.load(root) if e.get("concept") == "tb" and e.get("failed")
+        ]
         assert fails, "an unsound judgment must record a failure event"
         assert fails[-1]["source"] == "sandbox", fails[-1]
 
@@ -124,23 +132,32 @@ def main():
         _post(base, "/tutorial/%s/justification" % t_am, {"answer": "a"})
         j_am = next(k for k, v in state.judge_index.items() if v == t_am)
 
-        code1, _ = _post(base, "/judgment/%s" % j_am,
-                         {"judgment": "unsound", "message": "test"})
+        code1, _ = _post(
+            base, "/judgment/%s" % j_am, {"judgment": "unsound", "message": "test"}
+        )
         assert code1 == 200, code1
 
         # The correction is accepted as an amendment, and refused as a rewrite.
-        code2, body2 = _post(base, "/judgment/%s" % j_am,
-                             {"judgment": "sound", "message": "real reasoning"})
+        code2, body2 = _post(
+            base,
+            "/judgment/%s" % j_am,
+            {"judgment": "sound", "message": "real reasoning"},
+        )
         assert code2 == 409, "a second verdict must not silently succeed"
-        assert body2["standing"] == "unsound", \
+        assert body2["standing"] == "unsound", (
             "the FIRST verdict must stand, got %s" % body2["standing"]
+        )
         assert body2["standing_message"] == "test", body2
-        assert len(body2["judgments"]) == 2, \
+        assert len(body2["judgments"]) == 2, (
             "both verdicts must be kept for audit: %s" % body2["judgments"]
+        )
         assert body2["earned"] is False, "an amendment must not flip earned"
 
-        row = [e for e in _get(base, "/ledger")["entries"]
-               if e["gates"].get("judgment", {}).get("message") == "test"]
+        row = [
+            e
+            for e in _get(base, "/ledger")["entries"]
+            if e["gates"].get("judgment", {}).get("message") == "test"
+        ]
         assert row, "the standing verdict must be the one in the ledger"
         assert row[0]["earned"] is False
 
@@ -149,12 +166,14 @@ def main():
         # hard-coded 7801, so anything but the default port handed the user a
         # URL that did not answer.
         import serve as _s
+
         assert _s.DEFAULT_PORT, "there must still be a default"
         port = httpd.server_address[1]
         assert port != _s.DEFAULT_PORT, "test should be on an ephemeral port"
         html = urllib.request.urlopen(base + "/tutorial/tb.html").read().decode()
-        assert ('"%s"' % base) in html, \
-            "the daemon must inject its real address, not the default port"
+        assert (
+            '"%s"' % base
+        ) in html, "the daemon must inject its real address, not the default port"
 
         # ── 4c. The overlay must obey the `hidden` attribute ─────────────────
         # Shipped bug: `.veil{display:grid}` is an author rule and beats the
@@ -164,8 +183,9 @@ def main():
         page = urllib.request.urlopen(base + "/").read().decode()
         guard = page.find("[hidden]{display:none!important}")
         assert guard != -1, "the [hidden] guard is gone; overlays will not close"
-        assert guard < page.find("display:flex"), \
-            "the [hidden] guard must precede rules that set display"
+        assert guard < page.find(
+            "display:flex"
+        ), "the [hidden] guard must precede rules that set display"
 
         # ── 4d. EVERY endpoint the dashboard fetches must answer ─────────────
         # Shipped regression: `State.authorship()` was deleted as collateral
@@ -182,7 +202,8 @@ def main():
                 body = _get(base, ep)
             except Exception as exc:
                 raise AssertionError(
-                    "dashboard fetches %s and it failed: %s" % (ep, exc))
+                    "dashboard fetches %s and it failed: %s" % (ep, exc)
+                )
             assert isinstance(body, dict), "%s did not return an object" % ep
 
         # ── 4e. Sibling imports must not leak sys.path ───────────────────────
@@ -192,15 +213,21 @@ def main():
         before = len(sys.path)
         for _ in range(50):
             serve._score_profile(root)
-        assert len(sys.path) - before <= 1, \
-            "sibling import leaked %d sys.path entries" % (len(sys.path) - before)
+        assert (
+            len(sys.path) - before <= 1
+        ), "sibling import leaked %d sys.path entries" % (len(sys.path) - before)
 
         # ── 5. Preferences round-trip, and an unknown theme is refused ───────
-        saved = _post(base, "/preferences",
-                      {"theme": "terminal", "callsign": "ada", "onboarded": True})[1]
+        saved = _post(
+            base,
+            "/preferences",
+            {"theme": "terminal", "callsign": "ada", "onboarded": True},
+        )[1]
         assert saved["theme"] == "terminal" and saved["callsign"] == "ada"
-        assert _post(base, "/preferences", {"theme": "../etc"})[1]["theme"] \
-            == serve.DEFAULT_PREFS["theme"], "unknown theme must fall back"
+        assert (
+            _post(base, "/preferences", {"theme": "../etc"})[1]["theme"]
+            == serve.DEFAULT_PREFS["theme"]
+        ), "unknown theme must fall back"
 
         # ── 6. A pending judgment survives a daemon restart ──────────────────
         # Shipped bug: sessions were RAM-only, so any restart between the
@@ -210,7 +237,7 @@ def main():
         _post(base, "/tutorial/%s/check" % t2, {"passed": True})
         _post(base, "/tutorial/%s/justification" % t2, {"answer": "again"})
         j2 = next(k for k, v in state.judge_index.items() if v == t2)
-        reborn = serve.State(root)                      # simulate a restart
+        reborn = serve.State(root)  # simulate a restart
         assert reborn.judge_index.get(j2) == t2, "sessions did not persist"
         assert reborn.judge(j2, "sound")[1] is None, "cannot judge after restart"
 

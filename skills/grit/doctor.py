@@ -73,8 +73,9 @@ def _blocks(command):
     guard `|| exit 0` is what makes it impossible.
     """
     try:
-        p = subprocess.run(command, shell=True, input="{}", text=True,
-                           capture_output=True, timeout=10)
+        p = subprocess.run(
+            command, shell=True, input="{}", text=True, capture_output=True, timeout=10
+        )
         return p.returncode == 2
     except Exception:
         return False
@@ -110,10 +111,18 @@ def main():
     home = os.path.expanduser("~")
 
     sites = [
-        ("claude user",    os.path.join(home, ".claude", "settings.json"), _commands_in_claude),
-        ("claude project", os.path.join(project, ".claude", "settings.json"), _commands_in_claude),
-        ("zrb user",       os.path.join(home, ".zrb", "hooks.json"), _commands_in_zrb),
-        ("zrb project",    os.path.join(project, ".zrb", "hooks.json"), _commands_in_zrb),
+        (
+            "claude user",
+            os.path.join(home, ".claude", "settings.json"),
+            _commands_in_claude,
+        ),
+        (
+            "claude project",
+            os.path.join(project, ".claude", "settings.json"),
+            _commands_in_claude,
+        ),
+        ("zrb user", os.path.join(home, ".zrb", "hooks.json"), _commands_in_zrb),
+        ("zrb project", os.path.join(project, ".zrb", "hooks.json"), _commands_in_zrb),
     ]
 
     print("grit doctor — project: %s\n" % project)
@@ -136,9 +145,13 @@ def main():
             if not exists:
                 notes.append("SCRIPT MISSING: %s" % (script or "unparseable"))
             if not guarded:
-                notes.append("no `|| exit 0` guard — a missing script would block every write")
+                notes.append(
+                    "no `|| exit 0` guard — a missing script would block every write"
+                )
             if will_block:
-                notes.append("RETURNS EXIT 2 — this registration BLOCKS every matching tool call")
+                notes.append(
+                    "RETURNS EXIT 2 — this registration BLOCKS every matching tool call"
+                )
             if notes:
                 status = "BROKEN" if (will_block or not exists) else "risky"
                 bad += 1
@@ -150,7 +163,9 @@ def main():
 
     if found == 0:
         print("No grit hook registrations found. Nothing is recording authorship.")
-        print("Install one with:  bin/install.sh        (or --here for this project only)")
+        print(
+            "Install one with:  bin/install.sh        (or --here for this project only)"
+        )
         return 1
 
     print("%d registration(s), %d with problems." % (found, bad))

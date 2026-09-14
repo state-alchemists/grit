@@ -15,9 +15,9 @@ govern is history, not drift.
 
 import pathlib
 import re
-from datetime import datetime, timezone
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "grit"
@@ -39,7 +39,7 @@ def live_docs():
             continue
         text = p.read_text(encoding="utf-8")
         if re.search(r"\*\*Status\*\*:\s*\*?\*?Superseded", text):
-            continue          # history, exempt by design
+            continue  # history, exempt by design
         yield p, text
 
 
@@ -50,8 +50,10 @@ def main():
     verify = (SKILL / "verify_edit.py").read_text()
 
     # ── 1. Repo paths in backticks must exist ────────────────────────────────
-    path_re = re.compile(r"`((?:skills|hooks|bin|docs|tests)/[\w./-]+"
-                         r"\.(?:py|html|sh|json|jsonl|md))`")
+    path_re = re.compile(
+        r"`((?:skills|hooks|bin|docs|tests)/[\w./-]+"
+        r"\.(?:py|html|sh|json|jsonl|md))`"
+    )
     for p, text in live_docs():
         for ref in set(path_re.findall(text)):
             if not (ROOT / ref).exists():
@@ -82,7 +84,7 @@ def main():
     routed = set(re.findall(r'path == "(/[a-z]+)"', serve))
     routed |= {"/" + n for n in re.findall(r'parts\[0\] == "([a-z]+)"', serve)}
     routed |= {"/", "/tutorial"}
-    not_endpoints = {"/grit", "/v1"}          # slash command, upstream API
+    not_endpoints = {"/grit", "/v1"}  # slash command, upstream API
     for p, text in live_docs():
         for ep in set(re.findall(r"`(/[a-z]+)`", text)):
             if ep not in routed and ep not in not_endpoints:
@@ -108,14 +110,20 @@ def main():
         ("decay 90 days", "STALE_DAYS = 90"),
     ]:
         if needle not in score:
-            add("CONSTANT DRIFT", "score.py",
-                "%s is quoted in the docs but no longer in the code" % label)
+            add(
+                "CONSTANT DRIFT",
+                "score.py",
+                "%s is quoted in the docs but no longer in the code" % label,
+            )
 
     # ── 6. Verdict names must be ones verify_edit actually emits ─────────────
     for verdict in ("HUMAN-WRITTEN", "ASSISTED", "UNVERIFIED", "NOTHING CHANGED"):
         if verdict not in verify:
-            add("VERDICT DRIFT", "verify_edit.py",
-                "%s is documented but never emitted" % verdict)
+            add(
+                "VERDICT DRIFT",
+                "verify_edit.py",
+                "%s is documented but never emitted" % verdict,
+            )
 
     # ── 7. Claimed test counts must match what the suites print ──────────────
     real = {}
@@ -131,11 +139,15 @@ def main():
         add("SUITE DID NOT RUN", "tests", str(real))
     else:
         for p, text in live_docs():
-            for n in re.findall(r"(\d+)\s+(?:integrity|hook|scoring|daemon)\s+propert",
-                                text):
+            for n in re.findall(
+                r"(\d+)\s+(?:integrity|hook|scoring|daemon)\s+propert", text
+            ):
                 if int(n) not in real.values():
-                    add("STALE TEST COUNT", p.relative_to(ROOT),
-                        "doc says %s, suites report %s" % (n, real))
+                    add(
+                        "STALE TEST COUNT",
+                        p.relative_to(ROOT),
+                        "doc says %s, suites report %s" % (n, real),
+                    )
 
     # ── 8b. Numbers quoted in prose must equal what the model COMPUTES ───────
     # Constant DRIFT (§5) only proves a constant is still in the file. It cannot
@@ -144,6 +156,7 @@ def main():
     # came to promise `proven` after one unaided task when the code wants two.
     sys.path.insert(0, str(SKILL))
     import score as S
+
     at = "2026-01-01T00:00:00+00:00"
     now = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
@@ -151,8 +164,16 @@ def main():
         return S.score_concept(evs, now)
 
     def sandbox(n):
-        return [{"at": at, "source": "sandbox", "assistance": "none",
-                 "task": "t", "failed": False, "project": ""}] * n
+        return [
+            {
+                "at": at,
+                "source": "sandbox",
+                "assistance": "none",
+                "task": "t",
+                "failed": False,
+                "project": "",
+            }
+        ] * n
 
     computed = {
         # a tutorial ground forever — the per-task cap is the ceiling
@@ -165,19 +186,27 @@ def main():
         rel = p_.relative_to(ROOT)
         for m in re.finditer(r"plateaus? (?:at|around|to) ([0-9.]+)", text):
             if abs(float(m.group(1)) - computed["plateau"]) > 1e-9:
-                add("COMPUTED VALUE DRIFT", rel,
+                add(
+                    "COMPUTED VALUE DRIFT",
+                    rel,
                     "doc says the plateau is %s; the model computes %s"
-                    % (m.group(1), computed["plateau"]))
-        pat = (r"(one|two|three|four|\d+)\s+(?:distinct\s+)?unaided\s+"
-               r"repository\s+(?:task|event)")
+                    % (m.group(1), computed["plateau"]),
+                )
+        pat = (
+            r"(one|two|three|four|\d+)\s+(?:distinct\s+)?unaided\s+"
+            r"repository\s+(?:task|event)"
+        )
         for m in re.finditer(pat, text, re.I):
             raw = m.group(1).lower()
             n = words.get(raw, raw)
             if int(n) != computed["needs_unaided"]:
-                add("COMPUTED VALUE DRIFT", rel,
+                add(
+                    "COMPUTED VALUE DRIFT",
+                    rel,
                     "doc says `proven` needs %s unaided repository task(s); "
                     "PROVEN_NEEDS_UNAIDED_TASKS is %d"
-                    % (raw, computed["needs_unaided"]))
+                    % (raw, computed["needs_unaided"]),
+                )
 
     # ── 8c. Docs that state the same fact must state it the same way ─────────
     # Nothing above compares one document against another, so README could say
@@ -187,22 +216,28 @@ def main():
     shared = {
         "install.sh self-check count": (
             r"(both|all three|all four|\d+) self-checks must (?:all )?pass",
-            lambda m: m.group(1).lower()),
+            lambda m: m.group(1).lower(),
+        ),
         "tutorial generator": (
             r"(nothing generates a tutorial|the generator does not|"
             r"generator is (?:still )?unbuilt|there is no generator)",
-            lambda m: "unbuilt"),
+            lambda m: "unbuilt",
+        ),
     }
     for label, (pattern, norm_fn) in shared.items():
         answers = {}
         for p_, text in live_docs():
             for m in re.finditer(pattern, text, re.I):
-                answers.setdefault(norm_fn(m), []).append(
-                    str(p_.relative_to(ROOT)))
+                answers.setdefault(norm_fn(m), []).append(str(p_.relative_to(ROOT)))
         if len(answers) > 1:
-            add("DOCS DISAGREE", label, " vs ".join(
-                "%r (%s)" % (k, ", ".join(sorted(set(v))))
-                for k, v in sorted(answers.items())))
+            add(
+                "DOCS DISAGREE",
+                label,
+                " vs ".join(
+                    "%r (%s)" % (k, ", ".join(sorted(set(v))))
+                    for k, v in sorted(answers.items())
+                ),
+            )
 
     # ── 8d. Every "ADR NNNN" anywhere must name an ADR that exists ───────────
     # Renumbering the set broke two references in .py files that a docs-only
@@ -215,7 +250,9 @@ def main():
     for p_ in sources:
         if not p_.exists():
             continue
-        for n in sorted(set(re.findall(r"ADR (\d{4})", p_.read_text(encoding="utf-8")))):
+        for n in sorted(
+            set(re.findall(r"ADR (\d{4})", p_.read_text(encoding="utf-8")))
+        ):
             if n not in live_adrs:
                 add("NO SUCH ADR", p_.relative_to(ROOT), "cites ADR %s" % n)
 
@@ -224,17 +261,25 @@ def main():
     if index.exists():
         norm = lambda x: re.sub(r"[^a-z0-9]", "", x.lower())
         rows = re.findall(
-            r"\[(\d{4})\]\(([^)]+)\)\s*\|[^|]+\|\s*([^|]+)\|", index.read_text())
+            r"\[(\d{4})\]\(([^)]+)\)\s*\|[^|]+\|\s*([^|]+)\|", index.read_text()
+        )
         for _, fname, status in rows:
             f = index.parent / fname
             if not f.exists():
                 add("MISSING ADR", index.name, fname)
                 continue
             m = re.search(r"- \*\*Status\*\*: (.+)", f.read_text())
-            if m and norm(status)[:8] not in norm(m.group(1)) \
-                 and norm(m.group(1))[:8] not in norm(status):
-                add("ADR STATUS MISMATCH", fname,
-                    "index says %r, file says %r" % (status.strip(), m.group(1).strip()))
+            if (
+                m
+                and norm(status)[:8] not in norm(m.group(1))
+                and norm(m.group(1))[:8] not in norm(status)
+            ):
+                add(
+                    "ADR STATUS MISMATCH",
+                    fname,
+                    "index says %r, file says %r"
+                    % (status.strip(), m.group(1).strip()),
+                )
 
     # ── report ───────────────────────────────────────────────────────────────
     if not findings:

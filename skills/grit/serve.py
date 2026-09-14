@@ -20,14 +20,14 @@ Run:  python3 serve.py [--port N|0] [--host H] [--root DIR]
 """
 
 import argparse
+import importlib
 import json
 import os
-import importlib
 import secrets
 import signal
 import sys
-import time
 import threading
+import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -54,7 +54,7 @@ DEFAULT_PREFS = {
     "onboarded": False,
     "theme": "dungeon",
     "callsign": "",
-    "motion": True,             # animations; off is a real accessibility need
+    "motion": True,  # animations; off is a real accessibility need
     "ask_on_first_edit": True,  # the PreToolUse hook's one prompt per session
     "format": "socratic",
     "depth": "standard",
@@ -85,8 +85,8 @@ class State:
     def __init__(self, root):
         self.root = root
         self.lock = threading.Lock()
-        self.sessions = {}          # report token -> session dict
-        self.judge_index = {}       # judge token  -> report token
+        self.sessions = {}  # report token -> session dict
+        self.judge_index = {}  # judge token  -> report token
         self.ledger_path = os.path.join(root, "ledger.json")
         self.sessions_path = os.path.join(root, "sessions.json")
         self.prefs_path = os.path.join(root, "preferences.json")
@@ -107,8 +107,11 @@ class State:
                     os.rename(self.ledger_path, backup)
                 except OSError:
                     pass
-                return {"version": 1, "entries": [],
-                        "note": "previous ledger was unreadable; backed up to " + backup}
+                return {
+                    "version": 1,
+                    "entries": [],
+                    "note": "previous ledger was unreadable; backed up to " + backup,
+                }
         return {"version": 1, "entries": []}
 
     def save(self):
@@ -132,9 +135,11 @@ class State:
 
     def _save_sessions(self):
         """Caller holds the lock. Mode 0600: this file holds live credentials."""
-        write_json(self.sessions_path,
-                   {"sessions": self.sessions,
-                    "judge_index": self.judge_index}, mode=0o600)
+        write_json(
+            self.sessions_path,
+            {"sessions": self.sessions, "judge_index": self.judge_index},
+            mode=0o600,
+        )
 
     # ── Preferences ──────────────────────────────────────────────────────────
     def load_prefs(self):
@@ -149,7 +154,7 @@ class State:
     def save_prefs(self, patch):
         prefs = self.load_prefs()
         for key, value in (patch or {}).items():
-            if key in DEFAULT_PREFS:          # ignore unknown keys, don't 400
+            if key in DEFAULT_PREFS:  # ignore unknown keys, don't 400
                 prefs[key] = value
         if prefs.get("theme") not in THEMES:
             prefs["theme"] = DEFAULT_PREFS["theme"]
@@ -185,7 +190,7 @@ class State:
                 "concept": concept,
                 "tutorial": tutorial,
                 "opened": _now(),
-                "gates": {},          # gate -> payload
+                "gates": {},  # gate -> payload
                 "judgment": "pending",
                 # Why this tutorial fired. Without it the ADR 0012 audit cannot
                 # tell whether the battery is the thing mis-routing.
@@ -210,7 +215,7 @@ class State:
             if gate == "check":
                 session["gates"]["check"] = {
                     "passed": bool(payload.get("passed")),
-                    "check_type": "sandbox",     # ADR 0004: never a repo check
+                    "check_type": "sandbox",  # ADR 0004: never a repo check
                     "message": payload.get("message", ""),
                     "at": _now(),
                 }
@@ -259,13 +264,16 @@ class State:
             judged = session["gates"].get("judgment", {}).get("judgment")
             if entry["earned"]:
                 session["scored"] = True
-                self._record_evidence(session["concept"],
-                                      os.path.basename(session["tutorial"]))
+                self._record_evidence(
+                    session["concept"], os.path.basename(session["tutorial"])
+                )
             elif judged == "unsound":
                 session["scored"] = True
-                self._record_evidence(session["concept"],
-                                      os.path.basename(session["tutorial"]),
-                                      failed=True)
+                self._record_evidence(
+                    session["concept"],
+                    os.path.basename(session["tutorial"]),
+                    failed=True,
+                )
         return entry
 
     def _record_evidence(self, concept, task, failed=False):
@@ -274,10 +282,19 @@ class State:
         try:
             # No project: a tutorial is the same exercise wherever it is run,
             # so repeating it must decay regardless of which repo you are in.
-            sibling("score").record(self.root, concept, "sandbox", "none", task,
-                         detail=("justification judged unsound" if failed
-                                 else "tutorial completed, all three gates"),
-                         failed=failed)
+            sibling("score").record(
+                self.root,
+                concept,
+                "sandbox",
+                "none",
+                task,
+                detail=(
+                    "justification judged unsound"
+                    if failed
+                    else "tutorial completed, all three gates"
+                ),
+                failed=failed,
+            )
         except Exception as exc:
             sys.stderr.write("[grit] could not score %s: %s\n" % (concept, exc))
 
@@ -315,7 +332,8 @@ class State:
                 return amended, (
                     "already-judged:%s (amendment #%d recorded; the first "
                     "verdict stands and the score is unchanged)"
-                    % (first["judgment"], len(history) - 1))
+                    % (first["judgment"], len(history) - 1)
+                )
 
             session["judgment"] = judgment
             session["judgment_message"] = message
@@ -355,21 +373,34 @@ class State:
             if earned:
                 return {"status": "earned", "detail": "all three gates"}
             if not gates.get("check", {}).get("passed", False):
-                return {"status": "unearned",
-                        "detail": "check not passed"
-                                  + (": " + entry["gates"]["check"].get("message", "")
-                                     if gates.get("check") else "")}
+                return {
+                    "status": "unearned",
+                    "detail": "check not passed"
+                    + (
+                        ": " + entry["gates"]["check"].get("message", "")
+                        if gates.get("check")
+                        else ""
+                    ),
+                }
             judgment = entry.get("judgment", "pending")
             if judgment == "unsound":
                 # Judged and rejected. Saying "awaiting judgment" here would
                 # tell a user their failed attempt is still in progress.
-                return {"status": "unearned",
-                        "detail": "justification judged unsound"
-                                  + (": " + entry["judgment_message"]
-                                     if entry.get("judgment_message") else "")}
+                return {
+                    "status": "unearned",
+                    "detail": "justification judged unsound"
+                    + (
+                        ": " + entry["judgment_message"]
+                        if entry.get("judgment_message")
+                        else ""
+                    ),
+                }
             missing = [g for g in GATES if g not in gates]
             if missing:
-                return {"status": "unearned", "detail": "missing: " + ", ".join(missing)}
+                return {
+                    "status": "unearned",
+                    "detail": "missing: " + ", ".join(missing),
+                }
             if judgment == "pending":
                 return {"status": "unearned", "detail": "awaiting judgment"}
             return {"status": "unearned", "detail": "incomplete"}
@@ -386,14 +417,12 @@ class State:
         git; this view does not pretend to.
         """
         try:
-            with open(os.path.join(self.root, "projects.json"),
-                      encoding="utf-8") as fh:
+            with open(os.path.join(self.root, "projects.json"), encoding="utf-8") as fh:
                 projects = json.load(fh)
         except (OSError, ValueError):
             projects = []
 
-        out, totals = [], {"lines": 0, "edits": 0, "shell": 0,
-                           "offers": 0, "taken": 0}
+        out, totals = [], {"lines": 0, "edits": 0, "shell": 0, "offers": 0, "taken": 0}
         for path in projects:
             log = os.path.join(path, ".grit", "authorship.jsonl")
             if not os.path.exists(log):
@@ -428,17 +457,36 @@ class State:
             # Sessions where the choice was offered and no assistant edit
             # followed: the only evidence we have that anyone took it.
             taken = len(offer_sessions - edit_sessions)
-            out.append({"project": path, "lines": lines, "edits": edits,
-                        "shell": shell, "files": len(files), "last": last,
-                        "offers": offers, "taken": taken,
-                        "recent": sorted(files)[-5:]})
-            for k, v in (("lines", lines), ("edits", edits), ("shell", shell),
-                         ("offers", offers), ("taken", taken)):
+            out.append(
+                {
+                    "project": path,
+                    "lines": lines,
+                    "edits": edits,
+                    "shell": shell,
+                    "files": len(files),
+                    "last": last,
+                    "offers": offers,
+                    "taken": taken,
+                    "recent": sorted(files)[-5:],
+                }
+            )
+            for k, v in (
+                ("lines", lines),
+                ("edits", edits),
+                ("shell", shell),
+                ("offers", offers),
+                ("taken", taken),
+            ):
                 totals[k] += v
         out.sort(key=lambda p: p["last"], reverse=True)
-        return {"projects": out, "totals": totals,
-                "note": ("Assistant-authored only. Your own edits are not "
-                         "observed, so there is no percentage here to report.")}
+        return {
+            "projects": out,
+            "totals": totals,
+            "note": (
+                "Assistant-authored only. Your own edits are not "
+                "observed, so there is no percentage here to report."
+            ),
+        }
 
     def concept_of(self, tutorial_name):
         """Resolve (concept, routing_via) for a tutorial file.
@@ -449,8 +497,7 @@ class State:
         `token-bucket.html.meta.json`) supplies both; without one, the stem is
         used as a best guess and provenance is recorded as unknown.
         """
-        sidecar = os.path.join(self.tutorials_dir,
-                               tutorial_name + ".meta.json")
+        sidecar = os.path.join(self.tutorials_dir, tutorial_name + ".meta.json")
         if os.path.exists(sidecar):
             try:
                 with open(sidecar, "r", encoding="utf-8") as fh:
@@ -497,9 +544,11 @@ def _score_profile(root):
     try:
         return sibling("score").profile(root)
     except Exception as exc:
-        return {"concepts": {}, "headline": {"proven": 0, "recall": 0,
-                                             "tracked": 0},
-                "error": "%s: %s" % (type(exc).__name__, exc)}
+        return {
+            "concepts": {},
+            "headline": {"proven": 0, "recall": 0, "tracked": 0},
+            "error": "%s: %s" % (type(exc).__name__, exc),
+        }
 
 
 def _now():
@@ -526,12 +575,17 @@ def _stamp():
 
 
 def _html_escape(s):
-    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
-            .replace(">", "&gt;").replace('"', "&quot;"))
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
-    state = None          # injected
+    state = None  # injected
     server_version = "grit/0.1"
 
     def log_message(self, fmt, *args):
@@ -550,14 +604,18 @@ class Handler(BaseHTTPRequestHandler):
         """The dashboard is a static file next to this daemon, not a Python
         f-string. It is the product's face and it changes often; templating it
         in here meant every colour tweak risked a server-side syntax error."""
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "dashboard.html")
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "dashboard.html"
+        )
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 return fh.read()
         except OSError:
-            return ("<h1>grit</h1><p>dashboard.html is missing from "
-                    + _html_escape(os.path.dirname(path)) + "</p>")
+            return (
+                "<h1>grit</h1><p>dashboard.html is missing from "
+                + _html_escape(os.path.dirname(path))
+                + "</p>"
+            )
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     # Closed on purpose. Every client is a page this daemon served (same origin,
@@ -597,29 +655,48 @@ class Handler(BaseHTTPRequestHandler):
             # up, what has been recorded, and what is not built — the three
             # things an explicit `/grit` has to answer.
             auth = self.state.authorship()
-            return self._json(200, {
-                "score": _score_profile(self.state.root),
-                "daemon": {"url": "http://%s:%d" % self.server.server_address[:2],
-                           "root": self.state.root},
-                "authorship": auth,
-                "built": {"authorship_hook": True, "dashboard": True,
-                          "tutorial_runtime": True},
-                "not_built": ["tutorial generation"],
-                "note": ("Repository tasks score today. Tutorials are a second "
-                         "evidence source and their generator is not built."),
-            })
+            return self._json(
+                200,
+                {
+                    "score": _score_profile(self.state.root),
+                    "daemon": {
+                        "url": "http://%s:%d" % self.server.server_address[:2],
+                        "root": self.state.root,
+                    },
+                    "authorship": auth,
+                    "built": {
+                        "authorship_hook": True,
+                        "dashboard": True,
+                        "tutorial_runtime": True,
+                    },
+                    "not_built": ["tutorial generation"],
+                    "note": (
+                        "Repository tasks score today. Tutorials are a second "
+                        "evidence source and their generator is not built."
+                    ),
+                },
+            )
         if path == "/authorship":
             return self._json(200, self.state.authorship())
         if path == "/themes":
             return self._json(200, {"themes": list(THEMES)})
         if path == "/tutorials":
             with self.state.lock:
-                names = sorted(f for f in os.listdir(self.state.tutorials_dir)
-                               if f.endswith(".html"))
+                names = sorted(
+                    f
+                    for f in os.listdir(self.state.tutorials_dir)
+                    if f.endswith(".html")
+                )
                 entries = list(self.state.ledger.get("entries", []))
-            return self._json(200, {"tutorials": [
-                {"name": n, **self.state.view_of_tutorial(n, entries)}
-                for n in names]})
+            return self._json(
+                200,
+                {
+                    "tutorials": [
+                        {"name": n, **self.state.view_of_tutorial(n, entries)}
+                        for n in names
+                    ]
+                },
+            )
         if path == "/ledger":
             with self.state.lock:
                 return self._json(200, self.state.ledger)
@@ -629,36 +706,42 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, _score_profile(self.state.root))
         if path.startswith("/tutorial/"):
             # Serve a tutorial by name, injecting a fresh session token.
-            name = os.path.basename(self.path[len("/tutorial/"):].split("?")[0])
+            name = os.path.basename(self.path[len("/tutorial/") :].split("?")[0])
             path = os.path.join(self.state.tutorials_dir, name)
             if not os.path.exists(path) or not os.path.abspath(path).startswith(
-                    os.path.abspath(self.state.tutorials_dir)):
+                os.path.abspath(self.state.tutorials_dir)
+            ):
                 return self._json(404, {"error": "no such tutorial"})
             # Concept identity is NOT the filename (ADR 0009). Prefer the
             # sidecar `<file>.meta.json` — `x.html` -> `x.html.meta.json` —
             # holding {"concept": "token-bucket", "via": "..."};
             # fall back to the stem so hand-copied tutorials still work.
             concept, via = self.state.concept_of(name)
-            token, judge_token = self.state.open_session(
-                concept, path, routing_via=via)
+            token, judge_token = self.state.open_session(concept, path, routing_via=via)
             with open(path, "r", encoding="utf-8") as fh:
                 html = fh.read()
-            base = "http://%s:%d" % (self.server.server_address[0],
-                                     self.server.server_address[1])
+            base = "http://%s:%d" % (
+                self.server.server_address[0],
+                self.server.server_address[1],
+            )
             # The judge token goes to the operator's terminal, never to the
             # browser. This is the split that makes gate 3 the assistant's.
             sys.stderr.write(
                 "[grit] session for '%s' — judge with:\n"
                 "       curl -s -X POST %s/judgment/%s "
                 "-H 'Content-Type: application/json' "
-                "-d '{\"judgment\":\"sound\"}'\n"
-                % (concept, base, judge_token))
+                '-d \'{"judgment":"sound"}\'\n' % (concept, base, judge_token)
+            )
             # Hand the page its REPORT token without touching the file on disk.
             html = html.replace(
                 "</head>",
-                "<script>window.GRIT_SESSION=" + json.dumps(token)
-                + ";window.GRIT_DAEMON=" + json.dumps(base) + ";</script></head>",
-                1)
+                "<script>window.GRIT_SESSION="
+                + json.dumps(token)
+                + ";window.GRIT_DAEMON="
+                + json.dumps(base)
+                + ";</script></head>",
+                1,
+            )
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -686,26 +769,38 @@ class Handler(BaseHTTPRequestHandler):
         # credential. Never reachable with the token the page holds.
         if len(parts) == 2 and parts[0] == "judgment":
             entry, err = self.state.judge(
-                parts[1], payload.get("judgment"), payload.get("message", ""))
+                parts[1], payload.get("judgment"), payload.get("message", "")
+            )
             if err:
                 # An amendment is not a failure to understand — it is a
                 # deliberate refusal to rewrite. Hand back the standing verdict
                 # and the full history so the caller sees exactly what holds,
                 # rather than a bare error it might retry blindly.
                 if err.startswith("already-judged:") and entry:
-                    return self._json(409, {
-                        "error": err,
-                        "standing": entry.get("judgment"),
-                        "standing_message": entry.get("judgment_message", ""),
-                        "earned": entry.get("earned"),
-                        "judgments": entry.get("judgments", []),
-                        "remedy": ("Gate 3 is append-only. To change the "
-                                   "outcome, redo the tutorial — that opens a "
-                                   "new session and produces new evidence."),
-                    })
+                    return self._json(
+                        409,
+                        {
+                            "error": err,
+                            "standing": entry.get("judgment"),
+                            "standing_message": entry.get("judgment_message", ""),
+                            "earned": entry.get("earned"),
+                            "judgments": entry.get("judgments", []),
+                            "remedy": (
+                                "Gate 3 is append-only. To change the "
+                                "outcome, redo the tutorial — that opens a "
+                                "new session and produces new evidence."
+                            ),
+                        },
+                    )
                 return self._json(400, {"error": err})
-            return self._json(200, {"ok": True, "earned": entry.get("earned"),
-                                    "judgment": entry.get("judgment")})
+            return self._json(
+                200,
+                {
+                    "ok": True,
+                    "earned": entry.get("earned"),
+                    "judgment": entry.get("judgment"),
+                },
+            )
 
         # /tutorial/<report-token>/<event> — the two gates the page may report.
         if len(parts) == 3 and parts[0] == "tutorial":
@@ -715,37 +810,53 @@ class Handler(BaseHTTPRequestHandler):
             elif event == "judgment":
                 # The page asking to judge itself is the attack this split
                 # exists to stop. Refuse loudly rather than 404.
-                return self._json(403, {
-                    "error": "judgment-requires-judge-token",
-                    "detail": "gate 3 is the assistant's; the page cannot award it",
-                })
+                return self._json(
+                    403,
+                    {
+                        "error": "judgment-requires-judge-token",
+                        "detail": "gate 3 is the assistant's; the page cannot award it",
+                    },
+                )
             else:
                 return self._json(404, {"error": "unknown event " + event})
             if err:
                 return self._json(400, {"error": err})
-            return self._json(200, {
-                "ok": True,
-                "judgment": entry.get("judgment", "pending"),
-                "message": entry.get("judgment_message", ""),
-                "earned": entry.get("earned", False),
-                "gates_present": entry.get("gates_present", []),
-                "gates_required": entry.get("gates_required", list(GATES)),
-            })
+            return self._json(
+                200,
+                {
+                    "ok": True,
+                    "judgment": entry.get("judgment", "pending"),
+                    "message": entry.get("judgment_message", ""),
+                    "earned": entry.get("earned", False),
+                    "gates_present": entry.get("gates_present", []),
+                    "gates_required": entry.get("gates_required", list(GATES)),
+                },
+            )
         return self._json(404, {"error": "not found"})
 
 
 def main():
     ap = argparse.ArgumentParser(description="grit local daemon")
-    ap.add_argument("--port", type=int, default=int(os.environ.get(
-        "GRIT_PORT", DEFAULT_PORT)),
-        help="0 picks any free port; the real one is written to daemon.json")
-    ap.add_argument("--root", default=os.path.expanduser(
-        os.environ.get("GRIT_ROOT", "~/.grit")))
+    ap.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("GRIT_PORT", DEFAULT_PORT)),
+        help="0 picks any free port; the real one is written to daemon.json",
+    )
+    ap.add_argument(
+        "--root", default=os.path.expanduser(os.environ.get("GRIT_ROOT", "~/.grit"))
+    )
     ap.add_argument("--host", default=os.environ.get("GRIT_HOST", "127.0.0.1"))
-    ap.add_argument("--daemon", action="store_true",
-                    help="detach and keep running after this shell exits")
-    ap.add_argument("--stop", action="store_true",
-                    help="stop the daemon named in <root>/daemon.json")
+    ap.add_argument(
+        "--daemon",
+        action="store_true",
+        help="detach and keep running after this shell exits",
+    )
+    ap.add_argument(
+        "--stop",
+        action="store_true",
+        help="stop the daemon named in <root>/daemon.json",
+    )
     args = ap.parse_args()
 
     where = os.path.join(os.path.expanduser(args.root), "daemon.json")
@@ -765,28 +876,42 @@ def main():
         # terminal should not 404 your own data — that was the single biggest
         # day-to-day friction in this product.
         import subprocess
-        argv = [sys.executable, os.path.abspath(__file__),
-                "--root", args.root, "--host", args.host,
-                "--port", str(args.port)]
-        proc = subprocess.Popen(argv, start_new_session=True,
-                                stdin=subprocess.DEVNULL,
-                                stdout=open(os.path.join(
-                                    os.path.expanduser(args.root),
-                                    "daemon.log"), "ab"),
-                                stderr=subprocess.STDOUT)
-        for _ in range(50):                     # wait for it to publish itself
+
+        argv = [
+            sys.executable,
+            os.path.abspath(__file__),
+            "--root",
+            args.root,
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
+        ]
+        proc = subprocess.Popen(
+            argv,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=open(
+                os.path.join(os.path.expanduser(args.root), "daemon.log"), "ab"
+            ),
+            stderr=subprocess.STDOUT,
+        )
+        for _ in range(50):  # wait for it to publish itself
             time.sleep(0.1)
             try:
                 with open(where, encoding="utf-8") as fh:
                     info = json.load(fh)
                 if info.get("pid") == proc.pid:
-                    print("grit serve — %s  (detached, pid %d)"
-                          % (info["url"], proc.pid))
+                    print(
+                        "grit serve — %s  (detached, pid %d)" % (info["url"], proc.pid)
+                    )
                     return 0
             except (OSError, ValueError):
                 pass
-        print("daemon did not start; see %s"
-              % os.path.join(args.root, "daemon.log"), file=sys.stderr)
+        print(
+            "daemon did not start; see %s" % os.path.join(args.root, "daemon.log"),
+            file=sys.stderr,
+        )
         return 1
 
     os.makedirs(args.root, exist_ok=True)
@@ -799,8 +924,8 @@ def main():
             "      Something else is using that port. Try:\n"
             "        python3 %s --port 0      (any free port)\n"
             "        GRIT_PORT=7802 python3 %s\n"
-            % (args.host, args.port, exc.strerror or exc,
-               sys.argv[0], sys.argv[0]))
+            % (args.host, args.port, exc.strerror or exc, sys.argv[0], sys.argv[0])
+        )
         return 1
 
     # --port 0 means the kernel chose; ask the socket what we actually got.
@@ -811,9 +936,18 @@ def main():
     # assistant, the dashboard link and the judge command all read this instead
     # of hard-coding 7801 — which was wrong the moment anyone passed --port.
     with open(where, "w", encoding="utf-8") as fh:
-        json.dump({"url": url, "host": args.host, "port": port,
-                   "pid": os.getpid(), "root": args.root,
-                   "started": _now()}, fh, indent=2)
+        json.dump(
+            {
+                "url": url,
+                "host": args.host,
+                "port": port,
+                "pid": os.getpid(),
+                "root": args.root,
+                "started": _now(),
+            },
+            fh,
+            indent=2,
+        )
     # NOTE: a SIGKILL (or a power cut) leaves this file behind pointing at a
     # dead port. Readers should treat it as a hint, not a promise — a failed
     # connection means "start the daemon", not "the daemon is broken".

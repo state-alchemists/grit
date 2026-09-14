@@ -105,7 +105,7 @@ def load(root):
             try:
                 out.append(json.loads(line))
             except ValueError:
-                continue          # one bad line must not void a record
+                continue  # one bad line must not void a record
     return out
 
 
@@ -147,21 +147,30 @@ def near_duplicates(root, concept, cutoff=0.82):
         return []
     norm = lambda x: x.lower().replace("_", "-").replace(" ", "-").rstrip("s")
     hits = [c for c in existing if norm(c) == norm(concept)]
-    hits += [c for c in difflib.get_close_matches(concept, existing, n=3,
-                                                  cutoff=cutoff)
-             if c not in hits]
+    hits += [
+        c
+        for c in difflib.get_close_matches(concept, existing, n=3, cutoff=cutoff)
+        if c not in hits
+    ]
     return hits
 
 
-def record(root, concept, source, assistance, task, detail="", project="",
-           failed=False):
+def record(
+    root, concept, source, assistance, task, detail="", project="", failed=False
+):
     if source not in SOURCE_WEIGHT:
         raise ValueError("source must be one of %s" % list(SOURCE_WEIGHT))
     if assistance not in ASSISTANCE:
         raise ValueError("assistance must be one of %s" % list(ASSISTANCE))
-    row = {"at": _now(), "concept": concept, "source": source,
-           "assistance": assistance, "task": task, "detail": detail,
-           "project": os.path.abspath(project) if project else ""}
+    row = {
+        "at": _now(),
+        "concept": concept,
+        "source": source,
+        "assistance": assistance,
+        "task": task,
+        "detail": detail,
+        "project": os.path.abspath(project) if project else "",
+    }
     if failed:
         # Before the write, not on the returned dict: the file is the record,
         # and a failure that misses it scores as a pass.
@@ -175,9 +184,9 @@ def record(root, concept, source, assistance, task, detail="", project="",
 def score_concept(events, now=None):
     """Score one concept's events. Pure: no clock, no disk, no globals."""
     total = 0.0
-    seen = {}                     # (source, task) -> how many times already
-    given = {}                    # (source, task) -> credit already granted
-    unaided_tasks = set()         # distinct repo tasks done with no help
+    seen = {}  # (source, task) -> how many times already
+    given = {}  # (source, task) -> credit already granted
+    unaided_tasks = set()  # distinct repo tasks done with no help
     projects = set()
     passes = fails = 0
 
@@ -202,7 +211,7 @@ def score_concept(events, now=None):
         weight = SOURCE_WEIGHT.get(source, 0.2)
         credit = weight * ASSISTANCE.get(assistance, 0.0) * novelty
         if _age_days(ev.get("at"), now) > STALE_DAYS:
-            credit *= 0.5         # old evidence is weaker evidence
+            credit *= 0.5  # old evidence is weaker evidence
 
         # Hard ceiling per distinct task. Doing the same thing again is allowed
         # and is even good practice — it just stops counting as new evidence.
@@ -227,9 +236,10 @@ def score_concept(events, now=None):
     blocked = None
     if level != "proven":
         if total >= PROVEN_AT and not enough_unaided:
-            blocked = ("needs %d distinct unaided tasks in a real repository "
-                       "(you have %d)"
-                       % (PROVEN_NEEDS_UNAIDED_TASKS, len(unaided_tasks)))
+            blocked = (
+                "needs %d distinct unaided tasks in a real repository "
+                "(you have %d)" % (PROVEN_NEEDS_UNAIDED_TASKS, len(unaided_tasks))
+            )
         elif enough_unaided:
             blocked = "needs more evidence"
 
@@ -254,11 +264,12 @@ def profile(root, now=None):
     recall = sum(1 for v in concepts.values() if v["level"] == "recall")
     return {
         "concepts": concepts,
-        "headline": {"proven": proven, "recall": recall,
-                     "tracked": len(concepts)},
-        "note": ("Derived from evidence.jsonl. `proven` requires unaided work "
-                 "in a real repository — sandbox exercises alone cannot reach "
-                 "it, and repeating one exercise is worth progressively less."),
+        "headline": {"proven": proven, "recall": recall, "tracked": len(concepts)},
+        "note": (
+            "Derived from evidence.jsonl. `proven` requires unaided work "
+            "in a real repository — sandbox exercises alone cannot reach "
+            "it, and repeating one exercise is worth progressively less."
+        ),
     }
 
 
@@ -267,8 +278,14 @@ def _demo():
     base = "2026-01-01T00:00:00+00:00"
 
     def ev(source, assistance, task, at=base, failed=False, project="/p"):
-        return {"at": at, "source": source, "assistance": assistance,
-                "task": task, "failed": failed, "project": project}
+        return {
+            "at": at,
+            "source": source,
+            "assistance": assistance,
+            "task": task,
+            "failed": failed,
+            "project": project,
+        }
 
     now = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
@@ -305,8 +322,9 @@ def _demo():
     assert r["level"] != "proven", "one real task must not be enough: %s" % r
 
     # TWO distinct unaided real tasks are.
-    r = score_concept(same + [ev("repo", "none", "real-1"),
-                              ev("repo", "none", "real-2")], now)
+    r = score_concept(
+        same + [ev("repo", "none", "real-1"), ev("repo", "none", "real-2")], now
+    )
     assert r["level"] == "proven" and r["unaided_tasks"] == 2, r
 
     # Repeating ONE repo task forever is capped and never proves anything.
@@ -320,40 +338,67 @@ def _demo():
     assert abs(part - full / 2) < 1e-9, (full, part)
 
     # A failure pushes the level back down.
-    r = score_concept([ev("sandbox", "none", "t1"),
-                       ev("repo", "none", "t2", failed=True),
-                       ev("repo", "none", "t3", failed=True)], now)
+    r = score_concept(
+        [
+            ev("sandbox", "none", "t1"),
+            ev("repo", "none", "t2", failed=True),
+            ev("repo", "none", "t3", failed=True),
+        ],
+        now,
+    )
     assert r["fails"] == 2 and r["score"] < 0.4, r
 
     # Old evidence weighs half.
-    fresh = score_concept([ev("repo", "none", "t1", at="2026-01-01T00:00:00+00:00")], now)
-    stale = score_concept([ev("repo", "none", "t1", at="2020-01-01T00:00:00+00:00")], now)
+    fresh = score_concept(
+        [ev("repo", "none", "t1", at="2026-01-01T00:00:00+00:00")], now
+    )
+    stale = score_concept(
+        [ev("repo", "none", "t1", at="2020-01-01T00:00:00+00:00")], now
+    )
     assert stale["score"] < fresh["score"], (fresh, stale)
 
     # The same task id in two different projects is two tasks, not a repeat.
-    r = score_concept([ev("repo", "none", "001", project="/a"),
-                       ev("repo", "none", "001", project="/b")], now)
-    assert r["level"] == "proven" and r["unaided_tasks"] == 2, \
+    r = score_concept(
+        [
+            ev("repo", "none", "001", project="/a"),
+            ev("repo", "none", "001", project="/b"),
+        ],
+        now,
+    )
+    assert r["level"] == "proven" and r["unaided_tasks"] == 2, (
         "task ids collided across projects: %s" % r
+    )
     assert r["projects"] == 2, r
 
     # A tutorial is the same tutorial wherever it is run — project is ignored.
-    r = score_concept([ev("sandbox", "none", "tut-a", project="/a"),
-                       ev("sandbox", "none", "tut-a", project="/b")], now)
-    assert r["score"] < 0.4, "a repeated tutorial must decay across projects too: %s" % r
+    r = score_concept(
+        [
+            ev("sandbox", "none", "tut-a", project="/a"),
+            ev("sandbox", "none", "tut-a", project="/b"),
+        ],
+        now,
+    )
+    assert r["score"] < 0.4, (
+        "a repeated tutorial must decay across projects too: %s" % r
+    )
 
     # Near-duplicate detection: the guard against silent fragmentation.
-    import tempfile, shutil as _sh
+    import shutil as _sh
+    import tempfile
+
     tmp = tempfile.mkdtemp(prefix="grit-names-")
     try:
         record(tmp, "token-bucket", "repo", "none", "t1", project="/p")
         for variant in ("token_bucket", "token-buckets", "Token-Bucket"):
-            assert near_duplicates(tmp, variant), \
+            assert near_duplicates(tmp, variant), (
                 "%s must be flagged against token-bucket" % variant
-        assert not near_duplicates(tmp, "middleware-ordering"), \
-            "an unrelated concept must not be flagged"
-        assert not near_duplicates(tmp, "token-bucket"), \
-            "an exact match is not a duplicate, it is the same concept"
+            )
+        assert not near_duplicates(
+            tmp, "middleware-ordering"
+        ), "an unrelated concept must not be flagged"
+        assert not near_duplicates(
+            tmp, "token-bucket"
+        ), "an exact match is not a duplicate, it is the same concept"
     finally:
         _sh.rmtree(tmp, ignore_errors=True)
 
@@ -365,11 +410,14 @@ def _demo():
         before = score_concept(load(tmp2))["score"]
         record(tmp2, "c", "repo", "none", "t2", project="/p", failed=True)
         rows = load(tmp2)
-        assert rows[-1].get("failed") is True, \
+        assert rows[-1].get("failed") is True, (
             "failed flag never reached the evidence file: %s" % rows[-1]
+        )
         after = score_concept(rows)["score"]
-        assert after < before, \
-            "a recorded failure must LOWER the score (%s -> %s)" % (before, after)
+        assert after < before, "a recorded failure must LOWER the score (%s -> %s)" % (
+            before,
+            after,
+        )
     finally:
         _sh.rmtree(tmp2, ignore_errors=True)
 
@@ -378,18 +426,21 @@ def _demo():
 
 def main():
     ap = argparse.ArgumentParser(description="grit scoring")
-    ap.add_argument("command",
-                    choices=["record", "show", "concepts", "selftest"])
+    ap.add_argument("command", choices=["record", "show", "concepts", "selftest"])
     ap.add_argument("concept", nargs="?")
     ap.add_argument("--source", choices=sorted(SOURCE_WEIGHT))
     ap.add_argument("--assistance", choices=sorted(ASSISTANCE))
     ap.add_argument("--task", default="")
     ap.add_argument("--detail", default="")
-    ap.add_argument("--project", default=os.getcwd(),
-                    help="repo this task belongs to; ignored for --source sandbox")
+    ap.add_argument(
+        "--project",
+        default=os.getcwd(),
+        help="repo this task belongs to; ignored for --source sandbox",
+    )
     ap.add_argument("--failed", action="store_true")
-    ap.add_argument("--root", default=os.path.expanduser(
-        os.environ.get("GRIT_ROOT", "~/.grit")))
+    ap.add_argument(
+        "--root", default=os.path.expanduser(os.environ.get("GRIT_ROOT", "~/.grit"))
+    )
     args = ap.parse_args()
     root = os.path.expanduser(args.root)
 
@@ -399,8 +450,11 @@ def main():
 
     if args.command == "concepts":
         names = known_concepts(root)
-        print("\n".join(names) if names else
-              "(no concepts yet — the first recorded task creates one)")
+        print(
+            "\n".join(names)
+            if names
+            else "(no concepts yet — the first recorded task creates one)"
+        )
         return 0
 
     if args.command == "show":
@@ -412,16 +466,30 @@ def main():
         return 2
     dupes = near_duplicates(root, args.concept)
     if dupes:
-        print("grit: '%s' looks like an existing concept: %s\n"
-              "      Using a new name SPLITS the evidence, and a split concept "
-              "can never reach `proven`.\n"
-              "      Reuse one of those names unless this is genuinely a "
-              "different idea."
-              % (args.concept, ", ".join(dupes)), file=sys.stderr)
-    row = record(root, args.concept, args.source, args.assistance,
-                 args.task, args.detail, args.project, failed=args.failed)
-    print(json.dumps(score_concept(
-        [e for e in load(root) if e.get("concept") == args.concept]), indent=2))
+        print(
+            "grit: '%s' looks like an existing concept: %s\n"
+            "      Using a new name SPLITS the evidence, and a split concept "
+            "can never reach `proven`.\n"
+            "      Reuse one of those names unless this is genuinely a "
+            "different idea." % (args.concept, ", ".join(dupes)),
+            file=sys.stderr,
+        )
+    row = record(
+        root,
+        args.concept,
+        args.source,
+        args.assistance,
+        args.task,
+        args.detail,
+        args.project,
+        failed=args.failed,
+    )
+    print(
+        json.dumps(
+            score_concept([e for e in load(root) if e.get("concept") == args.concept]),
+            indent=2,
+        )
+    )
     return 0
 
 

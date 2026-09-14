@@ -38,8 +38,9 @@ def _git(*args, cwd="."):
     """Run a git command. Returns None when git or the repo is unavailable,
     rather than raising — a project without git is a supported situation."""
     try:
-        out = subprocess.run(("git",) + args, cwd=cwd, capture_output=True,
-                             text=True, timeout=20)
+        out = subprocess.run(
+            ("git",) + args, cwd=cwd, capture_output=True, text=True, timeout=20
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     return out.stdout if out.returncode == 0 else None
@@ -56,8 +57,18 @@ def _state(cwd="."):
     # which would otherwise show up as a working-tree change and make every
     # verify report "yes, something changed" — the tool detecting itself.
     diff = _git("diff", "HEAD", "--", ".", ":(exclude).grit", cwd=cwd) or ""
-    untracked = _git("ls-files", "--others", "--exclude-standard",
-                     "--", ".", ":(exclude).grit", cwd=cwd) or ""
+    untracked = (
+        _git(
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--",
+            ".",
+            ":(exclude).grit",
+            cwd=cwd,
+        )
+        or ""
+    )
     return {
         "head": head.strip(),
         "diff_sha": hashlib.sha256(diff.encode()).hexdigest()[:16],
@@ -88,9 +99,10 @@ def _assistant_lines(cwd, since_iso):
         # case and should score. With no hook, nobody was watching.
         try:
             here = os.path.dirname(os.path.abspath(__file__))
-            if here not in sys.path:      # insert once; see serve.sibling()
+            if here not in sys.path:  # insert once; see serve.sibling()
                 sys.path.insert(0, here)
             import doctor
+
             if doctor.is_watching(os.path.abspath(cwd)):
                 return {"lines": 0, "files": [], "opaque": 0}
         except Exception:
@@ -124,8 +136,11 @@ def snapshot(task, cwd="."):
         return 1
     with open(_store(cwd, task), "w", encoding="utf-8") as fh:
         json.dump({"task": task, "before": state}, fh, indent=2)
-    hook = "yes" if os.path.exists(
-        os.path.join(cwd, ".grit", "authorship.jsonl")) else "no (or not yet)"
+    hook = (
+        "yes"
+        if os.path.exists(os.path.join(cwd, ".grit", "authorship.jsonl"))
+        else "no (or not yet)"
+    )
     print("grit: snapshot taken for task %s" % task)
     print("  head:            %s" % state["head"][:12])
     print("  authorship log:  %s" % hook)
@@ -135,8 +150,10 @@ def snapshot(task, cwd="."):
 def verify(task, cwd="."):
     path = _store(cwd, task)
     if not os.path.exists(path):
-        print("grit: no snapshot for task %s — run `snapshot %s` at handover"
-              % (task, task))
+        print(
+            "grit: no snapshot for task %s — run `snapshot %s` at handover"
+            % (task, task)
+        )
         return 1
     with open(path, encoding="utf-8") as fh:
         before = json.load(fh)["before"]
@@ -146,12 +163,16 @@ def verify(task, cwd="."):
         print("grit: not a git repository — attribution unverified")
         return 1
 
-    changed = (after["head"] != before["head"]
-               or after["diff_sha"] != before["diff_sha"]
-               or after["untracked"] != before["untracked"])
+    changed = (
+        after["head"] != before["head"]
+        or after["diff_sha"] != before["diff_sha"]
+        or after["untracked"] != before["untracked"]
+    )
 
-    diff = _git("diff", "--stat", before["head"], "--", ".",
-                ":(exclude).grit", cwd=cwd) or ""
+    diff = (
+        _git("diff", "--stat", before["head"], "--", ".", ":(exclude).grit", cwd=cwd)
+        or ""
+    )
     assistant = _assistant_lines(cwd, before["at"])
 
     print("grit: task %s" % task)
@@ -161,14 +182,18 @@ def verify(task, cwd="."):
             print("    %s" % line)
 
     if not changed:
-        print("  verdict: NOTHING CHANGED — the check cannot have been earned "
-              "by work done here.")
+        print(
+            "  verdict: NOTHING CHANGED — the check cannot have been earned "
+            "by work done here."
+        )
         return 2
 
     if assistant is None:
         print("  assistant edits: no authorship log — no hook on this runtime")
-        print("  verdict: UNVERIFIED. The work happened; who wrote it is not "
-              "provable here.")
+        print(
+            "  verdict: UNVERIFIED. The work happened; who wrote it is not "
+            "provable here."
+        )
         print("           Record it as assisted, or install the hook:")
         print("           bin/install.sh --zrb   (or --claude)")
         return 3
@@ -179,18 +204,24 @@ def verify(task, cwd="."):
             # author when the assistant also ran shell commands that nothing
             # watched — `python3 - <<EOF`, `sed -i` and friends all write files
             # while producing no edit event at all.
-            print("  assistant edits: none observed, but %d shell command(s) ran"
-                  % assistant["opaque"])
-            print("  verdict: UNVERIFIED. A shell command can write files "
-                  "without being seen, so 'nothing observed' does not mean "
-                  "'the human wrote it'.")
+            print(
+                "  assistant edits: none observed, but %d shell command(s) ran"
+                % assistant["opaque"]
+            )
+            print(
+                "  verdict: UNVERIFIED. A shell command can write files "
+                "without being seen, so 'nothing observed' does not mean "
+                "'the human wrote it'."
+            )
             return 3
         print("  assistant edits: none observed since the snapshot")
         print("  verdict: HUMAN-WRITTEN, by observation.")
         return 0
 
-    print("  assistant edits: %d lines across %d file(s)"
-          % (assistant["lines"], len(assistant["files"])))
+    print(
+        "  assistant edits: %d lines across %d file(s)"
+        % (assistant["lines"], len(assistant["files"]))
+    )
     for f in assistant["files"][:5]:
         print("    %s" % f)
     print("  verdict: ASSISTED — the assistant wrote part of this.")

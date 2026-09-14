@@ -19,7 +19,7 @@ import shlex
 import shutil
 import sys
 
-MARKER = "grit-hook.py"      # how we recognise our own entries on re-run
+MARKER = "grit-hook.py"  # how we recognise our own entries on re-run
 
 
 def guarded(hook_path):
@@ -47,8 +47,7 @@ def _load(path):
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except json.JSONDecodeError:
-        print("  %s is not valid JSON — leaving it alone" % path,
-              file=sys.stderr)
+        print("  %s is not valid JSON — leaving it alone" % path, file=sys.stderr)
         sys.exit(3)
 
 
@@ -80,9 +79,11 @@ def claude(path, hook, action):
         # Match on args too: the handler moved from shell form
         # ("python3 /path/grit-hook.py") to exec form ("python3", ["/path/..."]),
         # and an upgrade must still recognise the entry it is replacing.
-        return any(MARKER in h.get("command", "")
-                   or any(MARKER in a for a in h.get("args", []))
-                   for h in group.get("hooks", []))
+        return any(
+            MARKER in h.get("command", "")
+            or any(MARKER in a for a in h.get("args", []))
+            for h in group.get("hooks", [])
+        )
 
     pre[:] = [g for g in pre if not ours(g)]
     if action == "install":
@@ -90,18 +91,22 @@ def claude(path, hook, action):
         # references a path, because each element is passed as one argument
         # with no quoting — shell form would break on a path containing spaces.
         handler = {"type": "command", "command": guarded(hook), "timeout": 5}
-        pre.append({
-            # Real edits: recorded exactly, and they trigger the one prompt.
-            "matcher": "Write|Edit|NotebookEdit",
-            "hooks": [handler],
-        })
-        pre.append({
-            # Shell calls: recorded as opaque. Without this, an assistant that
-            # writes through `python3 - <<EOF` or `sed -i` leaves no trace and
-            # the work reads as human-written.
-            "matcher": "Bash|PowerShell",
-            "hooks": [handler],
-        })
+        pre.append(
+            {
+                # Real edits: recorded exactly, and they trigger the one prompt.
+                "matcher": "Write|Edit|NotebookEdit",
+                "hooks": [handler],
+            }
+        )
+        pre.append(
+            {
+                # Shell calls: recorded as opaque. Without this, an assistant that
+                # writes through `python3 - <<EOF` or `sed -i` leaves no trace and
+                # the work reads as human-written.
+                "matcher": "Bash|PowerShell",
+                "hooks": [handler],
+            }
+        )
     if not pre:
         hooks.pop("PreToolUse", None)
     if not hooks:
@@ -115,22 +120,28 @@ def zrb(path, hook, action):
     if data is None:
         data = []
     if not isinstance(data, list):
-        print("  %s is not a hook array — leaving it alone" % path,
-              file=sys.stderr)
+        print("  %s is not a hook array — leaving it alone" % path, file=sys.stderr)
         sys.exit(3)
 
     data[:] = [h for h in data if h.get("name") != "grit-authorship"]
     if action == "install":
-        data.append({
-            "name": "grit-authorship",
-            "description": "Record who wrote the code; offer self-completion once a session.",
-            "events": ["PreToolUse"],
-            "type": "command",
-            "matchers": [{"field": "tool_name", "operator": "regex",
-                          "value": "^(Write|Edit|NotebookEdit|Bash|PowerShell)$"}],
-            "config": {"command": guarded(hook), "shell": True},
-            "timeout": 5,
-        })
+        data.append(
+            {
+                "name": "grit-authorship",
+                "description": "Record who wrote the code; offer self-completion once a session.",
+                "events": ["PreToolUse"],
+                "type": "command",
+                "matchers": [
+                    {
+                        "field": "tool_name",
+                        "operator": "regex",
+                        "value": "^(Write|Edit|NotebookEdit|Bash|PowerShell)$",
+                    }
+                ],
+                "config": {"command": guarded(hook), "shell": True},
+                "timeout": 5,
+            }
+        )
     _write(path, data, empty=[])
     return data
 
@@ -140,8 +151,9 @@ def main():
     handler = {"claude": claude, "zrb": zrb}[runtime]
     handler(path, hook, action)
     if os.path.exists(path):
-        print("  %s  %s" % (
-            "registered" if action == "install" else "unregistered", path))
+        print(
+            "  %s  %s" % ("registered" if action == "install" else "unregistered", path)
+        )
 
 
 if __name__ == "__main__":
