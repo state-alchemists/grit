@@ -30,9 +30,10 @@ and a concept's score is the capped sum. Three multipliers, three reasons:
                   fourth a quarter. Repetition is not learning, and without this
                   the score is farmable by replaying one exercise.
 
-`proven` additionally REQUIRES at least one unaided repository event. No amount
-of sandbox grinding reaches it. That single rule is what stops the ladder from
-being climbable without doing real work.
+`proven` additionally REQUIRES two distinct unaided repository tasks (see
+PROVEN_NEEDS_UNAIDED_TASKS). No amount of sandbox grinding reaches it, and
+neither does repeating one real task. That rule is what stops the ladder from
+being climbable without doing real work twice.
 
 Failures lower the level, ageing halves the weight, and both are deliberate: a
 measurement that can only go up is not a measurement.
@@ -45,7 +46,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
-# Real work counts for more than an exercise. See ADR 0008: a sandbox check is
+# Real work counts for more than an exercise. See ADR 0004: a sandbox check is
 # a weaker oracle, and the weights are that rule expressed as arithmetic.
 # Calibrated so that ONE unaided task is strong evidence but not proof — two
 # distinct ones are. A single instance is a data point, not a capability, and
@@ -152,7 +153,8 @@ def near_duplicates(root, concept, cutoff=0.82):
     return hits
 
 
-def record(root, concept, source, assistance, task, detail="", project=""):
+def record(root, concept, source, assistance, task, detail="", project="",
+           failed=False):
     if source not in SOURCE_WEIGHT:
         raise ValueError("source must be one of %s" % list(SOURCE_WEIGHT))
     if assistance not in ASSISTANCE:
@@ -160,6 +162,10 @@ def record(root, concept, source, assistance, task, detail="", project=""):
     row = {"at": _now(), "concept": concept, "source": source,
            "assistance": assistance, "task": task, "detail": detail,
            "project": os.path.abspath(project) if project else ""}
+    if failed:
+        # Before the write, not on the returned dict: the file is the record,
+        # and a failure that misses it scores as a pass.
+        row["failed"] = True
     os.makedirs(root, exist_ok=True)
     with open(evidence_path(root), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row) + "\n")
@@ -282,7 +288,7 @@ def _demo():
     r = score_concept([ev("repo", "none", "t1"), ev("repo", "none", "t1")], now)
     assert r["level"] == "recall", "repeating one task must not prove it: %s" % r
 
-    # Grinding ONE tutorial plateaus: 0.4 + 0.2 + 0.133 + ... never reaches
+    # Grinding ONE tutorial plateaus at PER_TASK_CAP x 0.2 = 0.30 — never reaches
     # proven, and never gets there without real work.
     same = [ev("sandbox", "none", "tut-a") for _ in range(8)]
     r = score_concept(same, now)
@@ -351,7 +357,23 @@ def _demo():
     finally:
         _sh.rmtree(tmp, ignore_errors=True)
 
-    print("ok — 16 scoring properties hold")
+    # `--failed` must actually reach the file. It did not, and a recorded
+    # failure raised the score instead of lowering it.
+    tmp2 = tempfile.mkdtemp(prefix="grit-failed-")
+    try:
+        record(tmp2, "c", "repo", "none", "t1", project="/p")
+        before = score_concept(load(tmp2))["score"]
+        record(tmp2, "c", "repo", "none", "t2", project="/p", failed=True)
+        rows = load(tmp2)
+        assert rows[-1].get("failed") is True, \
+            "failed flag never reached the evidence file: %s" % rows[-1]
+        after = score_concept(rows)["score"]
+        assert after < before, \
+            "a recorded failure must LOWER the score (%s -> %s)" % (before, after)
+    finally:
+        _sh.rmtree(tmp2, ignore_errors=True)
+
+    print("ok — 18 scoring properties hold")
 
 
 def main():
@@ -397,9 +419,7 @@ def main():
               "different idea."
               % (args.concept, ", ".join(dupes)), file=sys.stderr)
     row = record(root, args.concept, args.source, args.assistance,
-                 args.task, args.detail, args.project)
-    if args.failed:
-        row["failed"] = True
+                 args.task, args.detail, args.project, failed=args.failed)
     print(json.dumps(score_concept(
         [e for e in load(root) if e.get("concept") == args.concept]), indent=2))
     return 0

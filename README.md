@@ -8,7 +8,7 @@ Learning lives at the person level (`~/.grit/`), not per project, and surfaces a
 
 The name is the thesis: grit is the opposite of friction-avoidance.
 
-> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is still missing is **tutorial generation** — the second evidence source — so today every score comes from real tasks. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/index.md). **Read [ADR 0007](docs/adr/0007-critical-path-battery-validity.md) before building anything** — it names the assumption that everything else rests on.
+> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is still missing is **tutorial generation** — the second evidence source — so today every score comes from real tasks. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/README.md). **Read [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything** — it names the assumption that everything else rests on.
 
 ---
 
@@ -72,11 +72,11 @@ Cited deliberately as a counterweight: [Cui et al., Management Science 2025](htt
 + a 2nd distinct unaided task    1.00  proven
 ```
 
-Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0014](docs/adr/0014-graded-score-from-capped-evidence.md).
+Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0009](docs/adr/0009-graded-score-from-capped-evidence.md).
 
 ## The dashboard
 
-The dashboard is the entry gate, not a status page ([ADR 0004](docs/adr/0004-measure-the-effect.md)). It opens on first run, asks what to call you and which theme you want, and applies each theme live as you click it.
+The dashboard is the entry gate, not a status page ([ADR 0001](docs/adr/0001-measure-the-effect.md)). It opens on first run, asks what to call you and which theme you want, and applies each theme live as you click it.
 
 Six themes — **Dungeon** (torchlit amber), **Terminal** (green phosphor and scanlines), **Synthwave** (neon magenta and cyan), **Forest** (moss and bark), **Arcade** (high contrast), **Paper** (light and printed). Animations can be turned off. The choice is stored in `~/.grit/preferences.json` and changeable any time from **Settings**.
 
@@ -103,7 +103,7 @@ bin/install.sh --doctor                   # check every registration on this mac
 bin/install.sh --here                     # project-scoped, no changes under ~
 ```
 
-Portable bash (works on macOS's bash 3.2). Replaces any prior copy, never touches skills that are not `grit`, and **verifies what it installed** — both self-checks must pass or it exits non-zero rather than leaving you a half-working tool.
+Portable bash (works on macOS's bash 3.2). Replaces any prior copy, never touches skills that are not `grit`, and **verifies what it installed** — the daemon, scoring and hook self-checks must all pass or it exits non-zero rather than leaving you a half-working tool. A docs-drift check also runs and warns, but does not block an install.
 
 ### The skill installs everywhere; the hook does not
 
@@ -158,7 +158,7 @@ bin/install.sh --doctor        # every registration, and whether its script actu
 
 ### The hook
 
-It fires on `Write`/`Edit` and does two things:
+It fires on every tool call that can write a file — `Write`, `Edit`, `NotebookEdit`, `Bash`, `PowerShell` — and does two things:
 
 1. **Records who wrote the code**, to `<project>/.grit/authorship.jsonl`. Edits (`Write`, `Edit`, `NotebookEdit`) are recorded exactly, with line counts. Shell calls (`Bash`, `PowerShell`) are recorded as **opaque** — an assistant can write files with `python3 - <<EOF` or `sed -i`, and nothing observes what those touched. Recording the call without a line count is weaker than seeing the edit, but "something unattributable happened" is true and silence is not: without this, shell-written code reads as human-written.
 2. **Asks once per session**, the first time the assistant reaches for the editor. Once. A prompt on every edit is how a tool gets uninstalled.
@@ -176,8 +176,9 @@ Open the URL it prints. You will get the onboarding gate and a dashboard with **
 
 ```bash
 python3 skills/grit/test_serve.py    # 6 integrity properties
-python3 hooks/test_hook.py           # 14 hook properties
-python3 skills/grit/score.py selftest  # 12 scoring properties
+python3 hooks/test_hook.py           # 15 hook properties
+python3 skills/grit/score.py selftest  # 18 scoring properties
+python3 bin/check_docs.py            # every factual claim in these docs
 ```
 
 ## What you can actually do with this today
@@ -200,19 +201,20 @@ concept level  ←  evidence.jsonl  ←  a repository task you did unaided   ✅
 | Daemon, gates, ledger integrity | **works** |
 | Dashboard, themes, auto-refresh | **works** |
 | Tutorial runtime | works, but nothing **generates** a tutorial |
-| Onboarding battery, router | **do not exist** — and ADR 0014 removed the need for them to exist first |
+| Onboarding battery, router | **do not exist** — and ADR 0009 removed the need for them to exist first |
 
-Read that as: the measurement substrate is built, the product is not. Building the battery is the critical path, and its core assumption is still untested — see [ADR 0007](docs/adr/0007-critical-path-battery-validity.md).
+Read that as: the measurement substrate is built, the product is not. The remaining build work is the tutorial generator. The remaining *risk* is validity — nothing has tested whether a `proven` concept predicts real capability, which is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md)'s question, restated for a scored profile rather than a battery.
 
 ## Documentation
 
 | Path | What it is |
 |------|-----------|
-| [docs/DESIGN.md](docs/DESIGN.md) | The workflow, on-disk layout, data contracts, build order |
-| [docs/adr/](docs/adr/index.md) | **Decision records** — why the design is this way, and what was rejected |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **How it works** — the three processes, the files, the invariants |
+| [docs/DESIGN.md](docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, the privacy boundary, what is unproven |
+| [docs/adr/](docs/adr/README.md) | **Decision records** — why the design is this way, and what was rejected |
 | [docs/LANDSCAPE.md](docs/LANDSCAPE.md) | Competing products, supporting evidence in tiers, the gaps |
 | [docs/USAGE.md](docs/USAGE.md) | Historical: a worked example of the original flow (superseded) |
-| [ADR 0013](docs/adr/0013-dashboard-polls-files-it-does-not-push.md) | **The data path**, as a diagram — onboarding → day-to-day → dashboard |
+| [ADR 0008](docs/adr/0008-dashboard-polls-files-it-does-not-push.md) | **The data path**, as a diagram — onboarding → day-to-day → dashboard |
 | [docs/dev-fixtures.md](docs/dev-fixtures.md) | Props for exercising the runtime — not user instructions |
 | [bin/install.sh](bin/install.sh) | Multi-runtime installer — zrb, Claude Code, and 29 more |
 | [hooks/](hooks/) | The `PreToolUse` hook and its self-check |
@@ -239,7 +241,7 @@ Read that as: the measurement substrate is built, the product is not. Building t
 
 **The honest claim.** This design may **avoid harm**. It does not claim to make anyone more skilled. Bastani et al.'s guardrailed arm was statistically indistinguishable from control — not better. No study shows a tool producing skill *gains* over working unaided.
 
-**The unproven assumption.** Everything depends on a battery predicting real-work proficiency. If it does not, routing runs on noise and the design collapses to a mirror. This is [ADR 0007](docs/adr/0007-critical-path-battery-validity.md), and it is testable before any implementation work.
+**The unproven assumption.** Everything depends on the profile predicting real-work proficiency. If a `proven` concept does not, the levels are noise and the design collapses to a mirror. This is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md), which was written about the onboarding battery and has been restated against the score that replaced it. The instrument changed; the question did not.
 
 ---
 

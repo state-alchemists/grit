@@ -229,7 +229,7 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
   </div>
 
   <details class="panel" id="unbuilt">
-    <summary><b>Tutorials</b> — generator not built yet</summary>
+    <summary><b>Tutorials</b> <span id="tut-summary">— generator not built yet</span></summary>
     <h2>Tutorials</h2>
     <div id="tutorials"></div>
     <h2>Recent runs</h2>
@@ -278,8 +278,18 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 let prefs = null;
+let ROOT = "";
 
-const getJSON = p => fetch(p).then(r => r.json());
+// One dead endpoint must not blank the page. These were fetched with
+// Promise.all, so when /authorship started 500-ing the whole render threw and
+// every panel sat at its static zeros — the product looked completely broken
+// because one route was. Degrade to a per-panel failure instead, and say which
+// one died rather than showing a plausible-looking zero.
+const FAILED = new Set();
+const getJSON = (p, fallback = {}) =>
+  fetch(p)
+    .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+    .catch(err => { FAILED.add(p + " (" + err.message + ")"); return fallback; });
 
 function applyTheme(name, motion) {
   document.documentElement.dataset.theme = name;
@@ -383,11 +393,18 @@ function conceptCard(name, c) {
 }
 
 async function render() {
+  FAILED.clear();
   const [profile, ledger, tuts, auth] = await Promise.all([
     getJSON("/profile"), getJSON("/ledger"), getJSON("/tutorials"),
     getJSON("/authorship"),
   ]);
-  const sc = await getJSON("/score").catch(() => ({concepts: {}, headline: {}}));
+  const sc = await getJSON("/score", {concepts: {}, headline: {}});
+
+  // Say plainly when a panel's data never arrived. A zero the user cannot
+  // distinguish from a real zero is worse than an error.
+  $("#rootline").innerHTML = FAILED.size
+    ? `<span class="fail">daemon not answering: ${esc([...FAILED].join(", "))}</span>`
+    : `local daemon &middot; <code>${esc(ROOT)}</code>`;
 
   const who = (prefs.callsign || "").trim();
   $("#hail").textContent = who ? `${who}'s standing` : "Grit";
@@ -451,6 +468,28 @@ async function render() {
        so nothing can appear here, and the profile above stays empty. This is the product being
        unfinished, not you being new.</div>`;
 
+  // The summary must describe what is actually on disk. Saying "generator not
+  // built yet" directly above a real tutorial is worse than saying nothing:
+  // it tells the user their tutorial does not exist while linking to it.
+  const nTuts = (tuts.tutorials || []).length;
+  $("#tut-summary").textContent = nTuts
+    ? `— ${nTuts} ready`
+    : "— generator not built yet";
+  // Open automatically when there is something to show, so a delivered
+  // tutorial is not hidden behind a collapsed panel the user has no reason
+  // to click. Left collapsed when empty — there is nothing to reveal.
+  // The listener is attached AFTER the programmatic open, otherwise the
+  // toggle event from our own `open = true` would count as a user toggle and
+  // re-collapse the panel on the next render.
+  const unbuilt = $("#unbuilt");
+  if (nTuts && !unbuilt.dataset.userToggled) unbuilt.open = true;
+  if (!unbuilt.dataset.bound) {
+    unbuilt.dataset.bound = "1";
+    unbuilt.addEventListener("toggle", () => {
+      unbuilt.dataset.userToggled = "1";
+    });
+  }
+
   const led = (ledger.entries || []).slice(-12).reverse().map(e => `<tr>
       <td>${esc(e.concept)}</td>
       <td class="${e.earned ? "pass" : "muted"}">${e.earned ? "earned" : esc(e.judgment || "pending")}</td>
@@ -479,7 +518,8 @@ function watch() {
   prefs = await getJSON("/preferences");
   const health = await getJSON("/health");
   applyTheme(prefs.theme, prefs.motion);
-  $("#rootline").innerHTML = `local daemon &middot; <code>${esc(health.root)}</code>`;
+  ROOT = health.root || "";
+  $("#rootline").innerHTML = `local daemon &middot; <code>${esc(ROOT)}</code>`;
   $("#app").hidden = false;
   await render();                    // data first: the page must be useful
   if (!prefs.onboarded) {            // ...then offer to personalise it

@@ -87,7 +87,9 @@ def _assistant_lines(cwd, since_iso):
         # log means the assistant has written nothing here — which is the DIY
         # case and should score. With no hook, nobody was watching.
         try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            here = os.path.dirname(os.path.abspath(__file__))
+            if here not in sys.path:      # insert once; see serve.sibling()
+                sys.path.insert(0, here)
             import doctor
             if doctor.is_watching(os.path.abspath(cwd)):
                 return {"lines": 0, "files": [], "opaque": 0}

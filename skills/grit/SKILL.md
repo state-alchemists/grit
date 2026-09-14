@@ -181,7 +181,7 @@ Use `--source sandbox` for a tutorial, `--failed` when the check failed — a me
 - **none 1.0, partial 0.5, full 0.0** — if you wrote it, it earns nothing.
 - **novelty `1/(1+repeats)`** — the same task or tutorial again is worth half, then a third.
 
-Levels: `unproven` → `recall` at 0.30 → `proven` at 0.80 **and at least one unaided repository event**. Grinding one tutorial plateaus around 0.4 and can never reach `proven`. Two distinct unaided tasks can.
+Levels: `unproven` → `recall` at 0.30 → `proven` at 0.80 **and at least two distinct unaided repository tasks**. Grinding one tutorial plateaus at 0.30 — `recall`, never `proven`. Two distinct unaided repository tasks reach 1.00.
 
 Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — say so if they ask why theirs went down.
 
@@ -203,9 +203,13 @@ If the justification is unsound, don't just correct it. Offer a drill on that co
 
 There is no lesson library. "Teach me X" creates a task, not a document.
 
-Generate a tutorial only against a measured gap, scoped to the user's own repository, cached per concept. Each one is a self-contained interactive page where they write code and a check runs — use `tutorial.template.html`, beside this file.
+**There is no generator.** Writing a tutorial means *you* author it by hand from `tutorial.template.html`, beside this file — the concept text and a real differential check, per concept. Do that only against a measured gap, scoped to the user's own repository. Never promise a tutorial you are not about to write yourself, and never imply one will appear on its own.
 
-Two properties that must survive every edit:
+Each one is a self-contained interactive page where the user writes code and a check runs.
+
+Three properties that must survive every edit:
+
+- **The self-test runs at worker scope and is not a function body.** A top-level `return` is a SyntaxError that kills the worker and reports as "self-test threw". Use an IIFE or if/else.
 
 - **The self-test must be able to fail.** Assert that the reference implementation passes *and* that known-wrong ones fail. A self-test that only checks the happy path proves nothing.
 - **Passing in the sandbox is weaker than passing in the repository.** Say so. A sandbox exercise shows recall of a concept; it does not show they can implement it in their own stack. Never present the two as equivalent.
@@ -235,9 +239,10 @@ What you need to know to use it correctly:
 **Copy the command the daemon printed to its own terminal** — it already contains the correct address and token. Do not assemble your own from memory; the port may not be the default.
 
 The tutorial page cannot reach that route — by design, so a page cannot pass itself. If you ever find you *can* judge with a credential the page also holds, stop and report it; something is broken.
+- **You get one verdict. Gate 3 appends; it does not replace.** Decide before you POST and write the real reasoning the first time — a second call returns `409` with the standing verdict, records your attempt as a visible amendment, and changes nothing. A verdict you can overwrite is not evidence. If you cast the wrong one, say so plainly and offer a fresh attempt at the tutorial; that opens a new session and produces new evidence. Never imply you can correct the record.
 - **Earned is derived, never declared.** All three gates present, check still passing, judgment sound. Don't describe a concept as earned on any weaker basis.
-- `~/.grit/tutorials/` starts empty. That is correct — tutorials are generated per gap.
-- Concept identity comes from a `<name>.html.meta.json` sidecar (`{"concept": "...", "via": "battery|probe|work"}`), **not the filename**. Two tutorials about one idea must land on one profile entry, and `via` is what makes a bad route traceable later.
+- `~/.grit/tutorials/` starts empty. That is correct — nothing ships a library, and nothing fills it on its own; a tutorial exists only once someone has authored one against a measured gap.
+- Concept identity comes from a `<name>.html.meta.json` sidecar (`{"concept": "...", "via": "work|probe"}`), **not the filename**. Two tutorials about one idea must land on one profile entry, and `via` is what makes a bad route traceable later.
 
 ---
 

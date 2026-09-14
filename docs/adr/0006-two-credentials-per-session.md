@@ -1,4 +1,4 @@
-# ADR 0011 — Two credentials per session: the page reports, the assistant judges
+# ADR 0006 — Two credentials per session: the page reports, the assistant judges
 
 - **Status**: Accepted
 - **Date**: 2026-09-13
@@ -7,7 +7,7 @@
 
 ## Context
 
-ADR 0009 gave the daemon its reason to exist: *"the page never writes the ledger; only this process does."* The first implementation held that sentence literally and lost it in practice.
+ADR 0005 gave the daemon its reason to exist: *"the page never writes the ledger; only this process does."* The first implementation held that sentence literally and lost it in practice.
 
 The daemon minted **one** session token per tutorial launch and injected it into the page as `window.GRIT_SESSION`. All three gates were then reachable at `POST /tutorial/<token>/<gate>` — including `judgment`. The page could not write `ledger.json` with its own hands, but it could make the daemon write any row it liked, `earned: true` included, with a single `fetch()`.
 
@@ -23,7 +23,7 @@ Three further defects shared the same root — one secret doing several jobs, an
 
 - `judge()` set `earned = judgment == "sound"` without consulting the check, so re-reporting a failed check afterwards left a row claiming `earned: true` beside `check.passed: false`.
 - Ledger rows carried the **raw session token** in their `session` field, and `/ledger` echoed any `http://localhost:*` origin. Every `npm run dev` on the machine could read the whole ledger — every concept failed, every justification verbatim — and then mint judgments from the tokens it found there. That is exactly the liability DESIGN §8 exists to prevent; loopback is not a boundary on a developer's machine, it is the least isolated address on it.
-- Sessions were RAM-only. Gate 3 arrives whenever the assistant gets to it, so a restart in that window stranded the concept permanently unearned, fixable only by hand-editing the ledger — which ADR 0010 forbids.
+- Sessions were RAM-only. Gate 3 arrives whenever the assistant gets to it, so a restart in that window stranded the concept permanently unearned, fixable only by hand-editing the ledger — which ADR 0009 forbids.
 
 ## Decision
 
@@ -44,14 +44,26 @@ Three supporting rules:
 
 ## Consequences
 
-- ADR 0009's guarantee is now mechanical rather than stated. The page cannot reach gate 3 with anything it holds.
+- ADR 0005's guarantee is now mechanical rather than stated. The page cannot reach gate 3 with anything it holds.
 - **The judge token must reach the assistant out of band.** Today it is printed to stderr and the assistant runs the `curl` line. This is the honest seam in the design: it works, and it is clearly a v1 mechanism rather than a finished one.
 - Anything that talked to the daemon cross-origin stops working. The tutorial template now uses a same-origin relative URL when the daemon served it, and the absolute fallback only applies to a hand-opened `file://` page.
 - `sessions.json` holds live credentials in plaintext under `~/.grit/`. It is mode-`0600` and never transmitted, which is the same boundary the ledger already relies on — one more file inside it, not a new exposure.
 - **The lesson generalises past this bug.** A guarantee written in a docstring is a claim; this repository's whole thesis is that claims are not measurements. `skills/grit/test_serve.py` now pins all six properties, and every case in it is a defect that actually shipped while the README described the daemon as "working and tested."
 
+## Addendum — 2026-09-14: gate 3 appends, it does not replace
+
+The split above kept the page away from gate 3 and stopped there. It left the verdict itself mutable, and `judge()` overwrote `session["judgment"]` on every call with no history.
+
+That surfaced in real use. A judgment was cast carrying the placeholder message `"test"`, then re-cast with the real reasoning; the ledger kept no trace of the first. A record whose whole claim is that it cannot be talked out of was quietly rewriting itself — the same class of defect as the page awarding its own judgment, one layer further in.
+
+**The first verdict stands.** Later calls append to a `judgments` history, return `409` with the standing verdict and the full list, and change nothing — not the gate, not `earned`, not the evidence. The remedy for a wrong verdict is a fresh attempt at the tutorial, which opens a new session and writes new evidence. Editing the past is the one operation this ledger exists to prevent, and "the assistant made a mistake" is not an exemption — it is the exact case an audit trail is for.
+
+Pinned by `test_serve.py` property 3c, which replays the real sequence: cast `unsound/"test"`, then attempt `sound/"real reasoning"`, and assert the standing verdict is still `unsound/"test"`, that both verdicts are retained, and that `earned` did not flip.
+
 ## Rejected
 
-- **One token, and trust the page not to call the judgment route.** This is ADR 0001's rejected self-report wearing a different hat, and it fails for the same reason: the party being measured should not hold the instrument.
+- **One token, and trust the page not to call the judgment route.** This is ADR 0011's rejected self-report wearing a different hat, and it fails for the same reason: the party being measured should not hold the instrument.
 - **Signing the judgment payload.** Any key the page could verify, the page could also use.
 - **Keeping permissive localhost CORS and adding a bearer token to `/ledger`.** Strictly more moving parts than closing CORS, for a cross-origin capability nothing needs.
+- **Letting a re-judgment replace the verdict when it comes from the same judge token.** The token proves who is calling, not that the second answer is better than the first. Under that rule the `"test"` incident is indistinguishable from a deliberate rewrite.
+- **Recording a compensating evidence row so the score follows the latest verdict.** Double-entry bookkeeping would keep the history honest, but `unsound` then `sound` nets to a different number than a clean `sound`, so the score would depend on how many times someone changed their mind. A frozen first measurement is simpler and truer.

@@ -25,16 +25,13 @@ MARKER = "grit-hook.py"      # how we recognise our own entries on re-run
 def guarded(hook_path):
     """The command to register, wrapped so it can never block a tool call.
 
-    Python exits 2 when it cannot open a script file — and 2 is exactly the
-    exit code both zrb and Claude Code read as "block this tool call". So a hook
-    whose script is missing, moved, or renamed does not fail open; it fails
-    CLOSED, and every Write and Edit in that project dies with a confusing
-    Python error until someone finds the config.
+    Python exits 2 when it cannot open a script file, and 2 is exactly the exit
+    code both zrb and Claude Code read as "block this tool call" — so a missing
+    or renamed script fails CLOSED, killing every Write and Edit in the project.
 
-    That happened. `|| exit 0` makes the entire failure class impossible:
-    missing file, wrong interpreter, syntax error, anything. grit signals its
-    decisions through JSON on stdout, never through exit codes, so it gives up
-    nothing by refusing to ever exit non-zero.
+    `|| exit 0` covers the whole class: missing file, wrong interpreter, syntax
+    error. grit signals through JSON on stdout, never exit codes, so it gives up
+    nothing (ADR 0007).
 
     The path is shell-quoted, which is why shell form is safe here despite
     spaces — exec form would be immune to spaces but cannot carry the guard.

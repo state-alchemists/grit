@@ -1,4 +1,4 @@
-# ADR 0004 — Measure the effect; make the invisible visible
+# ADR 0001 — Measure the effect; make the invisible visible
 
 - **Status**: Accepted
 - **Date**: 2026-09-13
@@ -22,9 +22,9 @@ Those products exist. The `atrophy` CLI maintains an Elo rating per skill and ch
 ## Rationale
 
 - **It is the only component with no bypass problem.** There is nothing to bypass; measurement does not ask permission and does not gate anything.
-- **It is the only component with no expertise-reversal risk.** It provides no guidance and imposes no external structure, so the ADR 0003 harm case does not apply.
+- **It is the only component with no expertise-reversal risk.** It provides no guidance and imposes no external structure, so the ADR 0002 harm case does not apply.
 - **It targets the specific failure that evidence establishes.** METR's finding is not that developers are bad at this; it is that they cannot see it. A mirror is the direct answer, and no competitor closes this loop.
-- **It is the substrate for everything else.** ADR 0001's routing, ADR 0002's decay, and ADR 0003's adaptive fading all read from the same measurements.
+- **It is the substrate for everything else.** ADR 0011's routing, ADR 0010's decay, and ADR 0002's adaptive fading all read from the same measurements.
 
 ## Alternatives Considered
 
@@ -35,12 +35,12 @@ Those products exist. The `atrophy` CLI maintains an Elo rating per skill and ch
 ## Consequences
 
 - **Positive**: the honest floor is a product that stands alone — a mirror that works even if every intervention is cut.
-- **Negative**: measurement without remediation decays into a guilt dashboard. This is why ADR 0005 keeps tutorials attached to real work rather than dropping them.
+- **Negative**: measurement without remediation decays into a guilt dashboard. This is why ADR 0003 keeps tutorials attached to real work rather than dropping them.
 - **Negative**: instrumented measures are weak proxies. Acceptance rate, retention of accepted suggestions in the final diff, and prompt-to-accept latency are all confounded by task type. A single "engagement score" is a Goodhart trap and must not be built.
 - **Follow-ups**: verify that the instrumented measures are available from the assistant's actual telemetry surface. Prompt-to-accept latency may be vendor-internal rather than exposed.
 
 ## Backlinks
 
-- [ADR index](index.md)
-- [ADR 0001 — Route on measured proficiency](0001-route-on-measured-proficiency.md)
-- [ADR 0005 — Grounded on-demand tutorials](0005-grounded-on-demand-tutorials.md)
+- [ADR index](README.md)
+- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0003 — Grounded on-demand tutorials](0003-grounded-on-demand-tutorials.md)

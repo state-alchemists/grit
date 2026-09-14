@@ -38,8 +38,8 @@ python3 skills/grit/serve.py --root /tmp/grit-scratch --port 0
 
 ```sh
 python3 skills/grit/test_serve.py      # 6 integrity properties
-python3 hooks/test_hook.py             # 14 hook properties
-python3 skills/grit/score.py selftest  # 12 scoring properties
+python3 hooks/test_hook.py             # 15 hook properties
+python3 skills/grit/score.py selftest  # 18 scoring properties
 ```
 
-Every case in both is a defect that actually shipped. Read the comments before changing one.
+Every case in all three is a defect that actually shipped. Read the comments before changing one.

@@ -188,10 +188,15 @@ function run(code, cases) {
 
 <!-- Tool self-test. A compromised self-test proves nothing.
 
-     The self-test MUST call self.postMessage() itself and terminate. A
-     text/plain script is read as text by the host, not executed as a
-     module — a bare `return` is a silent no-op, and a self-test that
-     silently checks nothing is worse than none at all. -->
+     The self-test MUST call self.postMessage() itself and terminate.
+
+     It runs at WORKER SCOPE, appended after the check source — so it can see
+     whatever the check defines (`run`, your cases, your reference). It is NOT
+     a function body: a top-level `return` is a SyntaxError ("Illegal return
+     statement"), which kills the whole worker and shows as "self-test threw".
+     Wrap early exits in an IIFE and post its result, or use if/else.
+
+     A self-test that silently checks nothing is worse than none at all. -->
 <script type="text/plain" id="verify-source">
 // VERIFY_SOURCE — replaced by the generator.
 // Must post { ok: bool, message: string }, then close.
@@ -255,7 +260,14 @@ function runInWorker(source, payload, timeoutMs = 4000) {
 // Extracted once so both the check and the self-test evaluate the same text.
 function buildCheckWrapper() {
   const src = document.getElementById("check-source").textContent;
+  // The check source is evaluated ONCE at worker scope, not inside the
+  // per-message closure. The self-test is appended to this same worker and
+  // needs to reach `run` and whatever the check defines; when those were
+  // trapped in a nested IIFE the self-test could never see them, so EVERY
+  // generated tutorial reported itself broken and disabled its own check
+  // button. Structurally impossible to get right without this hoist.
   return `
+    ${src}
     self.onmessage = (e) => {
       const { code, solution } = e.data;
       try {
@@ -264,11 +276,7 @@ function buildCheckWrapper() {
           self.postMessage({ pass: false, message: "No function named 'solve' was defined." });
           return;
         }
-        const result = (function() {
-          ${src}
-          return run(code, solve, solution);
-        })();
-        self.postMessage(result);
+        self.postMessage(run(code, solve, solution));
       } catch (err) {
         self.postMessage({ pass: false, message: "Error: " + err.message });
       }

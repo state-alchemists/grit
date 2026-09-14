@@ -359,6 +359,11 @@ if [[ "${uninstall}" -eq 0 && "${dry_run}" -eq 0 ]]; then
     else
         log "verify: FAILED — run python3 ${SKILL_SRC}/score.py selftest"; exit 1
     fi
+    if python3 -B "${REPO_ROOT}/bin/check_docs.py" >/dev/null 2>&1; then
+        log "verify: docs match the code"
+    else
+        log "verify: docs drifted — run python3 ${REPO_ROOT}/bin/check_docs.py" >&2
+    fi
     if [[ "${with_hook}" -eq 1 ]]; then
         if python3 -B "${REPO_ROOT}/hooks/test_hook.py" >/dev/null 2>&1; then
             log "verify: hook self-check passed"

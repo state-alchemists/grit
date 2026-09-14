@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-grit serve — the local daemon (ADR 0009).
+grit serve — the local daemon (ADR 0005).
 
 Owns two things the browser cannot:
   1. The tutorial SESSION. A single-use token minted per concept, so a report
@@ -22,6 +22,7 @@ Run:  python3 serve.py [--port N|0] [--host H] [--root DIR]
 import argparse
 import json
 import os
+import importlib
 import secrets
 import signal
 import sys
@@ -30,7 +31,7 @@ import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# ── The three gates (ADR 0009) ───────────────────────────────────────────────
+# ── The three gates (ADR 0005) ───────────────────────────────────────────────
 # A concept is earned only when all three hold. Kept explicit so the ordering
 # cannot drift as the code changes.
 GATES = ("check", "justification", "judgment")
@@ -64,13 +65,11 @@ DEFAULT_PREFS = {
 
 
 def _earned(session):
-    """The ONE definition of earned. Every gate must be present, the check must
-    actually have passed, and the judgment must be sound.
+    """The one definition of earned: all three gates present, the check still
+    passing, the judgment sound.
 
-    Derived in one place on purpose: this was previously assigned separately in
-    `record()` and `judge()`, and the two disagreed — re-reporting a failed
-    check after a sound judgment left a row asserting `earned: true` while
-    carrying `check.passed: false`.
+    Derived here and nowhere else, so two code paths cannot disagree about what
+    the word means.
     """
     gates = session.get("gates", {})
     if not all(g in gates for g in GATES):
@@ -113,16 +112,13 @@ class State:
         return {"version": 1, "entries": []}
 
     def save(self):
-        tmp = self.ledger_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(self.ledger, fh, indent=2, ensure_ascii=False)
-        os.replace(tmp, self.ledger_path)   # atomic; never a half-written ledger
+        write_json(self.ledger_path, self.ledger)
 
     # ── Sessions survive a restart ───────────────────────────────────────────
     # Gate 3 is the assistant's verdict and may land minutes or hours after the
     # justification. In-memory-only sessions meant any restart in that window
     # stranded the concept permanently unearned, with no route to fix it except
-    # hand-editing the ledger — which ADR 0010 forbids.
+    # hand-editing the ledger — which ADR 0009 forbids.
     def _load_sessions(self):
         if not os.path.exists(self.sessions_path):
             return
@@ -136,12 +132,9 @@ class State:
 
     def _save_sessions(self):
         """Caller holds the lock. Mode 0600: this file holds live credentials."""
-        tmp = self.sessions_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({"sessions": self.sessions,
-                       "judge_index": self.judge_index}, fh, indent=2)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, self.sessions_path)
+        write_json(self.sessions_path,
+                   {"sessions": self.sessions,
+                    "judge_index": self.judge_index}, mode=0o600)
 
     # ── Preferences ──────────────────────────────────────────────────────────
     def load_prefs(self):
@@ -160,10 +153,7 @@ class State:
                 prefs[key] = value
         if prefs.get("theme") not in THEMES:
             prefs["theme"] = DEFAULT_PREFS["theme"]
-        tmp = self.prefs_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(prefs, fh, indent=2, ensure_ascii=False)
-        os.replace(tmp, self.prefs_path)
+        write_json(self.prefs_path, prefs)
         return prefs
 
     def open_session(self, concept, tutorial, routing_via=None):
@@ -171,7 +161,7 @@ class State:
 
         `concept` is the concept's identity (e.g. "token-bucket"), NOT a
         filename. `tutorial` is the file it came from. Keeping them separate is
-        what lets the profile aggregate evidence per concept (ADR 0010); keying
+        what lets the profile aggregate evidence per concept (ADR 0009); keying
         on the filename made two tutorials about one idea into two unrelated
         rows.
 
@@ -180,7 +170,7 @@ class State:
         `justification` — the two gates the page legitimately observes. The
         *judge* token never reaches the browser; it is printed to the daemon's
         stdout for the assistant. With one shared token the page could POST its
-        own judgment and award itself the third gate, which made ADR 0009's
+        own judgment and award itself the third gate, which made ADR 0005's
         guarantee — "the page never writes the ledger" — true in letter and
         worthless in fact.
         """
@@ -197,7 +187,7 @@ class State:
                 "opened": _now(),
                 "gates": {},          # gate -> payload
                 "judgment": "pending",
-                # Why this tutorial fired. Without it the ADR 0007 audit cannot
+                # Why this tutorial fired. Without it the ADR 0012 audit cannot
                 # tell whether the battery is the thing mis-routing.
                 "routing_via": routing_via or "unknown",
                 "reports": [],
@@ -220,7 +210,7 @@ class State:
             if gate == "check":
                 session["gates"]["check"] = {
                     "passed": bool(payload.get("passed")),
-                    "check_type": "sandbox",     # ADR 0008: never a repo check
+                    "check_type": "sandbox",     # ADR 0004: never a repo check
                     "message": payload.get("message", ""),
                     "at": _now(),
                 }
@@ -262,23 +252,32 @@ class State:
         # The bridge the two halves were missing: a tutorial that passes all
         # three gates becomes SANDBOX evidence, so completing one actually
         # moves a score. Keyed on the tutorial so repeating the same exercise
-        # decays under the novelty rule (ADR 0014) instead of paying forever.
-        if entry["earned"] and not session.get("scored"):
-            session["scored"] = True
-            self._record_evidence(session["concept"],
-                                  os.path.basename(session["tutorial"]))
+        # decays under the novelty rule (ADR 0009) instead of paying forever.
+        # Unsound records a failure, not silence — the score model counts
+        # failures (ADR 0009), so an unrecorded one reads as "never attempted".
+        if not session.get("scored"):
+            judged = session["gates"].get("judgment", {}).get("judgment")
+            if entry["earned"]:
+                session["scored"] = True
+                self._record_evidence(session["concept"],
+                                      os.path.basename(session["tutorial"]))
+            elif judged == "unsound":
+                session["scored"] = True
+                self._record_evidence(session["concept"],
+                                      os.path.basename(session["tutorial"]),
+                                      failed=True)
         return entry
 
-    def _record_evidence(self, concept, task):
+    def _record_evidence(self, concept, task, failed=False):
         """Write one sandbox evidence row. Never let a scoring failure cost the
         user a completed tutorial — the ledger entry is already committed."""
         try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-            import score
             # No project: a tutorial is the same exercise wherever it is run,
             # so repeating it must decay regardless of which repo you are in.
-            score.record(self.root, concept, "sandbox", "none", task,
-                         detail="tutorial completed, all three gates")
+            sibling("score").record(self.root, concept, "sandbox", "none", task,
+                         detail=("justification judged unsound" if failed
+                                 else "tutorial completed, all three gates"),
+                         failed=failed)
         except Exception as exc:
             sys.stderr.write("[grit] could not score %s: %s\n" % (concept, exc))
 
@@ -297,17 +296,34 @@ class State:
                 return None, "unknown-session"
             if "justification" not in session["gates"]:
                 return None, "justification-not-submitted"
+
+            # Append-only: the first verdict stands, later ones are amendments
+            # that change nothing. The remedy for a wrong verdict is a fresh
+            # attempt, not an edit (ADR 0006).
+            stamped = {"judgment": judgment, "message": message, "at": _now()}
+            history = session.setdefault("judgments", [])
+            history.append(stamped)
+
+            if len(history) > 1:
+                first = history[0]
+                self._save_sessions()
+                amended = self._entry_for(session)
+                # Derive it here too: `_entry_for` does not set `earned` (only
+                # `_commit` does), and an amendment must never be ambiguous
+                # about what currently holds.
+                amended["earned"] = _earned(session)
+                return amended, (
+                    "already-judged:%s (amendment #%d recorded; the first "
+                    "verdict stands and the score is unchanged)"
+                    % (first["judgment"], len(history) - 1))
+
             session["judgment"] = judgment
             session["judgment_message"] = message
-            session["judgment_at"] = _now()
+            session["judgment_at"] = stamped["at"]
             # The judgment IS the third gate. Record it in `gates` too, or the
             # gate list contradicts `earned` — which is exactly the kind of
             # inconsistency this ledger exists to prevent.
-            session["gates"]["judgment"] = {
-                "judgment": judgment,
-                "message": message,
-                "at": _now(),
-            }
+            session["gates"]["judgment"] = dict(stamped)
             entry = self._commit(session, "judged-" + judgment)
             return entry, None
 
@@ -320,6 +336,9 @@ class State:
             "routing_via": session.get("routing_via", "unknown"),
             "judgment": session.get("judgment", "pending"),
             "judgment_message": session.get("judgment_message", ""),
+            # Every verdict ever cast on this session, in order. The first one
+            # is the one in effect; the rest are amendments kept for audit.
+            "judgments": list(session.get("judgments", [])),
             "gates": session["gates"],
         }
 
@@ -356,13 +375,79 @@ class State:
             return {"status": "unearned", "detail": "incomplete"}
         return {"status": "not started", "detail": "no attempts recorded"}
 
+    # ── Authorship: the measurement that works without a tutorial ────────────
+    def authorship(self):
+        """Aggregate every project's authorship log.
+
+        Reports ONLY what was observed: lines the assistant wrote, and shell
+        calls whose effect nobody watched. It deliberately does not compute a
+        percentage — the human side is not observed at all, so any denominator
+        here would be invented. `verify_edit.py` gets a real one per task, from
+        git; this view does not pretend to.
+        """
+        try:
+            with open(os.path.join(self.root, "projects.json"),
+                      encoding="utf-8") as fh:
+                projects = json.load(fh)
+        except (OSError, ValueError):
+            projects = []
+
+        out, totals = [], {"lines": 0, "edits": 0, "shell": 0,
+                           "offers": 0, "taken": 0}
+        for path in projects:
+            log = os.path.join(path, ".grit", "authorship.jsonl")
+            if not os.path.exists(log):
+                continue
+            lines = edits = shell = offers = 0
+            files, last = set(), ""
+            offer_sessions, edit_sessions = set(), set()
+            try:
+                with open(log, encoding="utf-8") as fh:
+                    for raw in fh:
+                        try:
+                            row = json.loads(raw)
+                        except ValueError:
+                            continue
+                        last = max(last, row.get("at", ""))
+                        if row.get("event") == "offered":
+                            offers += 1
+                            offer_sessions.add(row.get("session", ""))
+                            continue
+                        if row.get("author") != "assistant":
+                            continue
+                        edit_sessions.add(row.get("session", ""))
+                        if row.get("opaque"):
+                            shell += 1
+                        else:
+                            edits += 1
+                            lines += int(row.get("lines") or 0)
+                            if row.get("file"):
+                                files.add(row["file"])
+            except OSError:
+                continue
+            # Sessions where the choice was offered and no assistant edit
+            # followed: the only evidence we have that anyone took it.
+            taken = len(offer_sessions - edit_sessions)
+            out.append({"project": path, "lines": lines, "edits": edits,
+                        "shell": shell, "files": len(files), "last": last,
+                        "offers": offers, "taken": taken,
+                        "recent": sorted(files)[-5:]})
+            for k, v in (("lines", lines), ("edits", edits), ("shell", shell),
+                         ("offers", offers), ("taken", taken)):
+                totals[k] += v
+        out.sort(key=lambda p: p["last"], reverse=True)
+        return {"projects": out, "totals": totals,
+                "note": ("Assistant-authored only. Your own edits are not "
+                         "observed, so there is no percentage here to report.")}
+
     def concept_of(self, tutorial_name):
         """Resolve (concept, routing_via) for a tutorial file.
 
-        Concept identity must not be the filename (ADR 0010) — two tutorials
-        about one idea would otherwise be unrelated rows. A sidecar
-        `<name>.meta.json` supplies both; without one, the stem is used as a
-        best guess and provenance is recorded as unknown.
+        Concept identity must not be the filename (ADR 0009) — two tutorials
+        about one idea would otherwise be unrelated rows. A sidecar named for
+        the tutorial file plus `.meta.json` (so `token-bucket.html` pairs with
+        `token-bucket.html.meta.json`) supplies both; without one, the stem is
+        used as a best guess and provenance is recorded as unknown.
         """
         sidecar = os.path.join(self.tutorials_dir,
                                tutorial_name + ".meta.json")
@@ -377,13 +462,40 @@ class State:
         return os.path.splitext(tutorial_name)[0], "unknown"
 
 
+def sibling(name):
+    """Import a module from this skill's own directory.
+
+    The skill ships as a flat folder with no package, so siblings load by path.
+    Insert once: callers run per request, and repeating the insert grows
+    sys.path without bound.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    return importlib.import_module(name)
+
+
+def write_json(path, data, mode=None):
+    """Write JSON atomically: temp file, then rename.
+
+    Every file here is state a crash must not half-write; a truncated
+    ledger.json is unrecoverable.
+    """
+    tmp = path + ".tmp"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
 def _score_profile(root):
     """Per-concept levels from evidence.jsonl. Imported lazily and defensively:
     the dashboard must still render if scoring is missing or broken."""
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import score
-        return score.profile(root)
+        return sibling("score").profile(root)
     except Exception as exc:
         return {"concepts": {}, "headline": {"proven": 0, "recall": 0,
                                              "tracked": 0},
@@ -448,15 +560,10 @@ class Handler(BaseHTTPRequestHandler):
                     + _html_escape(os.path.dirname(path)) + "</p>")
 
     # ── CORS ─────────────────────────────────────────────────────────────────
-    # Deliberately closed. The only clients are pages this daemon serves itself
-    # (same origin, so they need no CORS header at all) and the assistant's CLI
-    # (not a browser, so it is unaffected).
-    #
-    # This used to echo any `http://localhost:*` origin, which on a developer's
-    # machine is not a boundary: every `npm run dev` in every cloned repo gets a
-    # localhost origin. Any such page could read /ledger — every concept you
-    # failed, every justification verbatim — which is precisely the liability
-    # DESIGN §8 exists to prevent.
+    # Closed on purpose. Every client is a page this daemon served (same origin,
+    # no header needed) or the assistant's CLI (not a browser). Allowing
+    # `localhost:*` is not a boundary on a dev machine — any `npm run dev` in any
+    # cloned repo gets one, and /ledger carries every concept you failed.
     def _cors(self):
         self.send_header("Vary", "Origin")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -518,7 +625,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, self.state.ledger)
         if path == "/profile":
             # Kept as an alias so nothing that already points here breaks.
-            # There is one profile now, and score.py owns it (ADR 0014).
+            # There is one profile now, and score.py owns it (ADR 0009).
             return self._json(200, _score_profile(self.state.root))
         if path.startswith("/tutorial/"):
             # Serve a tutorial by name, injecting a fresh session token.
@@ -527,8 +634,9 @@ class Handler(BaseHTTPRequestHandler):
             if not os.path.exists(path) or not os.path.abspath(path).startswith(
                     os.path.abspath(self.state.tutorials_dir)):
                 return self._json(404, {"error": "no such tutorial"})
-            # Concept identity is NOT the filename (ADR 0010). Prefer a sidecar
-            # `<name>.meta.json` with {"concept": "token-bucket", "via": "..."};
+            # Concept identity is NOT the filename (ADR 0009). Prefer the
+            # sidecar `<file>.meta.json` — `x.html` -> `x.html.meta.json` —
+            # holding {"concept": "token-bucket", "via": "..."};
             # fall back to the stem so hand-copied tutorials still work.
             concept, via = self.state.concept_of(name)
             token, judge_token = self.state.open_session(
@@ -580,6 +688,21 @@ class Handler(BaseHTTPRequestHandler):
             entry, err = self.state.judge(
                 parts[1], payload.get("judgment"), payload.get("message", ""))
             if err:
+                # An amendment is not a failure to understand — it is a
+                # deliberate refusal to rewrite. Hand back the standing verdict
+                # and the full history so the caller sees exactly what holds,
+                # rather than a bare error it might retry blindly.
+                if err.startswith("already-judged:") and entry:
+                    return self._json(409, {
+                        "error": err,
+                        "standing": entry.get("judgment"),
+                        "standing_message": entry.get("judgment_message", ""),
+                        "earned": entry.get("earned"),
+                        "judgments": entry.get("judgments", []),
+                        "remedy": ("Gate 3 is append-only. To change the "
+                                   "outcome, redo the tutorial — that opens a "
+                                   "new session and produces new evidence."),
+                    })
                 return self._json(400, {"error": err})
             return self._json(200, {"ok": True, "earned": entry.get("earned"),
                                     "judgment": entry.get("judgment")})

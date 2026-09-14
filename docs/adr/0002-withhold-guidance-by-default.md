@@ -1,4 +1,4 @@
-# ADR 0003 — Withhold guidance by default; grant it narrowly and adaptively
+# ADR 0002 — Withhold guidance by default; grant it narrowly and adaptively
 
 - **Status**: Accepted
 - **Date**: 2026-09-13
@@ -49,13 +49,13 @@ Concretely: no uniform step-gating, no blanket per-mission tutorials, and no con
 ## Consequences
 
 - **Positive**: the product does not impose novice scaffolding on experts, which is the single largest known harm risk in this design space.
-- **Negative**: adaptivity requires knowing proficiency per concept. That is the critical path (ADR 0007), and if proficiency cannot be inferred, this decision collapses — the design reverts to either uniform scaffolding (which reverses) or none (which is a mirror).
+- **Negative**: adaptivity requires knowing proficiency per concept. That is the critical path (ADR 0012), and if proficiency cannot be inferred, this decision collapses — the design reverts to either uniform scaffolding (which reverses) or none (which is a mirror).
 - **Negative**: **guidance still occurs.** One probe question is asked per unprofiled concept, and the expertise-reversal literature applies to *questions* too. Whether one question falls under the harm threshold is untested.
 - **Follow-ups**: instrument the probe itself — how often does it fire, and does firing correlate with worse outcomes for high-proficiency users? That is the measurement that would falsify this ADR.
 
 ## Backlinks
 
-- [ADR index](index.md)
-- [ADR 0001 — Route on measured proficiency](0001-route-on-measured-proficiency.md)
-- [ADR 0005 — Grounded on-demand tutorials](0005-grounded-on-demand-tutorials.md)
-- [ADR 0007 — The critical path](0007-critical-path-battery-validity.md)
+- [ADR index](README.md)
+- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0003 — Grounded on-demand tutorials](0003-grounded-on-demand-tutorials.md)
+- [ADR 0012 — The critical path](0012-profile-validity-is-the-critical-path.md)

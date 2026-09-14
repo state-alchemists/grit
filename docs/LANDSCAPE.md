@@ -4,7 +4,7 @@ Survey of products and research adjacent to Grit, with an honest account of what
 
 **Bottom line (corrected): products DO exist in this space, and an earlier version of this document wrongly said they did not.** The individual-facing anti-atrophy tools were missed on the first pass — see [§6a](#6a-correction--products-do-occupy-this-space) for Chestnut, `atrophy`, Lathe, and devatrophy.com. The opening is not "nobody built this"; it is that **nobody closes the measurement loop or enforces the AI-off signal.**
 
-The strongest design-relevant evidence is not here but in [ADR 0003](adr/0003-withhold-guidance-by-default.md) — in particular the **expertise reversal effect**, which says uniform scaffolding for experienced developers is contraindicated.
+The strongest design-relevant evidence is not here but in [ADR 0002](adr/0002-withhold-guidance-by-default.md) — in particular the **expertise reversal effect**, which says uniform scaffolding for experienced developers is contraindicated.
 
 ---
 
@@ -141,7 +141,7 @@ Compared **seven** cognitive-engagement techniques for keeping learners engaged 
 
 Optional guardrails in a large intro programming course, N=885. **50% used the "See Solution" bypass at least once; 14% used it on all three problems; lower-performing students bypassed more, and closer to deadlines.** Motivations: needing help, time pressure, lack of self-regulation, curiosity.
 
-**This is evidence *against* Grit's original default design, not for it.** It is a measurement of the failure mode that voluntary guardrails invite, and it is why DESIGN.md §7 was rewritten.
+**This is evidence *against* Grit's original default design, not for it.** It is a measurement of the failure mode that voluntary guardrails invite, and it is why per-mission mode selection was abandoned — see [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md).
 
 ### Tier 3 — Model: why rational adoption still traps you
 

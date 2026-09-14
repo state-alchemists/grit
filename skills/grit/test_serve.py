@@ -9,6 +9,7 @@ instead of quietly re-earning concepts nobody earned.
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -98,6 +99,51 @@ def main():
         assert tok not in blob, "report token leaked into the ledger"
         assert judge_tok not in blob, "judge token leaked into the ledger"
 
+        # ── 3b. An UNSOUND judgment records a FAILURE, not silence ───────────
+        # Shipped gap: a user passed the check, submitted a justification, was
+        # judged unsound — and their profile stayed completely empty. Nothing
+        # in the daemon ever wrote the failure event the score model supports.
+        t_un = _launch(base, "tb.html")
+        _post(base, "/tutorial/%s/check" % t_un, {"passed": True})
+        _post(base, "/tutorial/%s/justification" % t_un, {"answer": "vague"})
+        j_un = next(k for k, v in state.judge_index.items() if v == t_un)
+        _post(base, "/judgment/%s" % j_un, {"judgment": "unsound"})
+        import score as _score
+        fails = [e for e in _score.load(root)
+                 if e.get("concept") == "tb" and e.get("failed")]
+        assert fails, "an unsound judgment must record a failure event"
+        assert fails[-1]["source"] == "sandbox", fails[-1]
+
+        # ── 3c. Gate 3 appends; the first verdict stands ─────────────────────
+        # Shipped bug, seen in real use: a judgment was cast with the
+        # placeholder message "test", then re-cast with the real reasoning, and
+        # the ledger kept no trace of the first. A verdict you can silently
+        # overwrite is not evidence.
+        t_am = _launch(base, "tb.html")
+        _post(base, "/tutorial/%s/check" % t_am, {"passed": True})
+        _post(base, "/tutorial/%s/justification" % t_am, {"answer": "a"})
+        j_am = next(k for k, v in state.judge_index.items() if v == t_am)
+
+        code1, _ = _post(base, "/judgment/%s" % j_am,
+                         {"judgment": "unsound", "message": "test"})
+        assert code1 == 200, code1
+
+        # The correction is accepted as an amendment, and refused as a rewrite.
+        code2, body2 = _post(base, "/judgment/%s" % j_am,
+                             {"judgment": "sound", "message": "real reasoning"})
+        assert code2 == 409, "a second verdict must not silently succeed"
+        assert body2["standing"] == "unsound", \
+            "the FIRST verdict must stand, got %s" % body2["standing"]
+        assert body2["standing_message"] == "test", body2
+        assert len(body2["judgments"]) == 2, \
+            "both verdicts must be kept for audit: %s" % body2["judgments"]
+        assert body2["earned"] is False, "an amendment must not flip earned"
+
+        row = [e for e in _get(base, "/ledger")["entries"]
+               if e["gates"].get("judgment", {}).get("message") == "test"]
+        assert row, "the standing verdict must be the one in the ledger"
+        assert row[0]["earned"] is False
+
         # ── 4b. The bound port is published, never assumed ───────────────────
         # Shipped bug: SKILL.md, the tutorial fallback and the judge command all
         # hard-coded 7801, so anything but the default port handed the user a
@@ -120,6 +166,34 @@ def main():
         assert guard != -1, "the [hidden] guard is gone; overlays will not close"
         assert guard < page.find("display:flex"), \
             "the [hidden] guard must precede rules that set display"
+
+        # ── 4d. EVERY endpoint the dashboard fetches must answer ─────────────
+        # Shipped regression: `State.authorship()` was deleted as collateral
+        # when the superseded profile model was excised — it sat between the
+        # block being removed and the next method. `/authorship` then 500'd,
+        # and because the page fetches with Promise.all, ONE dead endpoint
+        # blanked the WHOLE dashboard. Nothing here tested that route, so it
+        # shipped. This list must match what dashboard.html actually calls.
+        page = urllib.request.urlopen(base + "/").read().decode()
+        called = sorted(set(re.findall(r'getJSON\("(/[a-z]+)"\)', page)))
+        assert called, "could not find the dashboard's fetches"
+        for ep in called:
+            try:
+                body = _get(base, ep)
+            except Exception as exc:
+                raise AssertionError(
+                    "dashboard fetches %s and it failed: %s" % (ep, exc))
+            assert isinstance(body, dict), "%s did not return an object" % ep
+
+        # ── 4e. Sibling imports must not leak sys.path ───────────────────────
+        # Shipped bug: `sys.path.insert(0, ...)` ran inside a per-request
+        # helper, so a daemon polled every 30s grew sys.path without bound and
+        # slowed every import after it. 200 requests measured 200 entries.
+        before = len(sys.path)
+        for _ in range(50):
+            serve._score_profile(root)
+        assert len(sys.path) - before <= 1, \
+            "sibling import leaked %d sys.path entries" % (len(sys.path) - before)
 
         # ── 5. Preferences round-trip, and an unknown theme is refused ───────
         saved = _post(base, "/preferences",
