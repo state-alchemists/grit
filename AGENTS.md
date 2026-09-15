@@ -26,7 +26,7 @@ Almost every defect in this repository's history was found by executing somethin
 
 ```sh
 python3 skills/grit/test_serve.py      # 13 integrity properties
-python3 hooks/test_hook.py             # 16 hook properties
+python3 hooks/test_hook.py             # 17 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs

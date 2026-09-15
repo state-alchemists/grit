@@ -1,13 +1,9 @@
 # ADR 0012 — Profile validity is the critical path
 
 - **Status**: Accepted — the study is **unrun**
-- **Date**: 2026-09-13 (restated against the score, 2026-09-14)
+- **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: validation, study, risk, falsification
-
-> **Restatement note.** This ADR was written as *"Battery validity is the critical path"*, when the onboarding battery was the only instrument. [ADR 0009](0009-graded-score-from-capped-evidence.md) replaced the battery with a score derived from observed work, and [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) deferred the battery indefinitely. **The instrument changed; the question did not.** It is restated here against the thing that actually ships.
-
-> **Progress note.** `bin/study_report.py` computes Q1, Q2 and Q2b retrospectively from an existing `evidence.jsonl` — no new instrumentation was needed, because every unaided repository event already carries its own later outcome (its `failed` flag). This does not answer the questions; it only means the answer is a command away once enough real usage has accumulated. Status stays **unrun**: a first look at one person's own log is not the study, which still needs the ≥5-tasks-per-condition, preregistered, multi-week design under "Method constraints" below.
 
 ## Context
 
@@ -23,7 +19,7 @@ If a `proven` concept does not predict real capability, then the levels are nois
 
 This is not a hypothetical risk to note and proceed past. It is the load-bearing claim.
 
-**What changed with the instrument.** The battery was to be validated *before* it was built, because it was pure cost until it predicted something. The score is different: it is derived from work the user was doing anyway, so it is cheap to collect and already accumulating. That makes the study easier to run and removes the argument for blocking implementation on it — but it removes none of the risk, because an unvalidated number shown to a user is a claim whether or not it was cheap.
+**What changed with the instrument.** This record began as *"Battery validity is the critical path"*, when the onboarding battery was the only instrument. [ADR 0009](0009-graded-score-from-capped-evidence.md) replaced the battery with a score derived from observed work, and [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) deferred the battery indefinitely. **The instrument changed; the question did not.** The battery was to be validated *before* it was built, because it was pure cost until it predicted something. The score is different: it is derived from work the user was doing anyway, so it is cheap to collect and already accumulating. That makes the study easier to run and removes the argument for blocking implementation on it — but it removes none of the risk, because an unvalidated number shown to a user is a claim whether or not it was cheap.
 
 ## Decision
 
@@ -36,6 +32,8 @@ This is not a hypothetical risk to note and proceed past. It is the load-bearing
 - **The failure is invisible without the study.** A level that carries no information looks exactly like one that does. Nothing in the running system can tell the difference, which is why it needs an outside measurement rather than more tests.
 
 ## The study
+
+Q1, Q2 and Q2b are already answerable in miniature. `bin/study_report.py` computes them retrospectively from an existing `evidence.jsonl` — no new instrumentation was needed, because every unaided repository event already carries its own later outcome (its `failed` flag). That does not answer the questions; it only means the answer is a command away once enough real usage has accumulated. A first look at one person's own log is not the study, which still needs the ≥5-tasks-per-condition, preregistered, multi-week design under "Method constraints" below — the status stays **unrun**.
 
 **Q1 — Does the level predict unassisted real-work proficiency?** Take the concepts a profile rates `proven`, `recall` and `unproven`. Over the following weeks, record actual unassisted performance on those same concepts in real work. If levels and outcomes agree at better than chance, the score carries information. If not, it is an expensive activity log.
 

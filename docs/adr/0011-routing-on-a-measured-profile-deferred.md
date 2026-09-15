@@ -1,11 +1,9 @@
 # ADR 0011 — Routing on a measured profile, and why it is deferred
 
 - **Status**: Accepted — **deferred**, nothing implements it
-- **Date**: 2026-09-13 (consolidated 2026-09-14)
+- **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: routing, measurement, profiling, onboarding, psychometrics, expertise-reversal
-
-> **Consolidation note.** This record merges three earlier ADRs that decided one thing between them — how the product would decide who needs a tutorial: *Route on measured proficiency, never on self-report*, *Calibrated onboarding battery, not a set of mini-games*, and the routing requirement from *Require a populated profile*. They were separate files describing a single unbuilt subsystem, which made the deferral hard to see. Nothing here was rejected; the decay half of the profile ADR shipped and lives in [ADR 0010](0010-proficiency-decays-with-inactivity.md).
 
 ## Context
 
@@ -20,6 +18,8 @@ The population at risk is precisely the population that answers confidently. A s
 An earlier design in this repository asked users to pick a mode — *walkthrough / attempt / solve* — at the start of each mission. Kapoor et al. (2025, N=885) measured that design: with optional guardrails and a "See Solution" bypass, **50% of students used the bypass at least once, 14% on every problem, and lower-performing students bypassed more, especially near deadlines.** Routing on a self-declared preference reproduced the failure it was meant to prevent.
 
 That settles *what not to route on*. Two questions follow: what the instrument is, and whether the profile it fills is optional.
+
+Three earlier decisions are folded together here because between them they answer one question — who needs a tutorial: *route on measured proficiency, never on self-report*; *a calibrated onboarding battery, not a set of mini-games*; and the routing requirement from *require a populated profile*. Nothing was rejected in the fold; the decay half of that profile ADR shipped separately and lives in [ADR 0010](0010-proficiency-decays-with-inactivity.md).
 
 ## Decision
 

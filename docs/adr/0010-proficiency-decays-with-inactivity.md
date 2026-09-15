@@ -1,11 +1,9 @@
 # ADR 0010 — Proficiency decays with inactivity
 
 - **Status**: Accepted — implemented (`STALE_DAYS = 90`)
-- **Date**: 2026-09-13 (scope narrowed 2026-09-14)
+- **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: profiling, staleness, decay, measurement
-
-> **Scope note.** This ADR originally decided two things: that a populated profile is *required for routing*, and that proficiency *decays*. The routing requirement is deferred with the rest of the router — see [ADR 0011](0011-routing-on-a-measured-profile-deferred.md). Decay shipped, and is what this record now covers.
 
 ## Context
 
@@ -14,6 +12,8 @@ A stored proficiency value raises a question the moment it is written: does it s
 Software work changes what people can do, in both directions. A developer who spent a quarter in a framework becomes fluent in it; one who spent a quarter in management may not have written production code at all. A value that never expires reports both as unchanged.
 
 This matters more here than in a typical profile store, because the number is a *claim about capability*. "You are proven at token buckets" on evidence from eighteen months ago is not a measurement — it is a memory presented as one.
+
+This record originally carried a second decision — that a populated profile is *required for routing* — which is deferred with the router it belongs to and decided in [ADR 0011](0011-routing-on-a-measured-profile-deferred.md). Decay is what shipped, and is what this record covers.
 
 ## Decision
 
@@ -38,7 +38,7 @@ Implemented in [ADR 0009](0009-graded-score-from-capped-evidence.md)'s model: ev
 ## Consequences
 
 - **Positive**: a level reflects recent capability, and a user who stops practising sees it fall rather than keeping a badge.
-- **Positive**: re-verification is free and tied to real work. A concept demonstrably used unaided in a real task is fresh evidence and refreshes the value without a quiz — which is what the original follow-up on this ADR asked for.
+- **Positive**: re-verification is free and tied to real work. A concept demonstrably used unaided in a real task is fresh evidence and refreshes the value without a quiz.
 - **Negative**: **the horizon is unvalidated.** 90 days is a judgement. Too short and it nags a competent user; too long and it certifies someone who has drifted. Nothing has measured which.
 - **Negative**: decay is invisible until someone reads the dashboard. There is no notification that a concept went stale, so a level can quietly fall without the user learning anything from it.
 
@@ -46,5 +46,5 @@ Implemented in [ADR 0009](0009-graded-score-from-capped-evidence.md)'s model: ev
 
 - [ADR index](README.md)
 - [ADR 0009 — A graded score, derived from capped evidence](0009-graded-score-from-capped-evidence.md) — where decay is implemented
-- [ADR 0011 — Routing on a measured profile, deferred](0011-routing-on-a-measured-profile-deferred.md) — the routing half of the original ADR
+- [ADR 0011 — Routing on a measured profile, deferred](0011-routing-on-a-measured-profile-deferred.md) — where the populated-profile routing requirement this record carried is decided and deferred
 - [ADR 0012 — Profile validity is the critical path](0012-profile-validity-is-the-critical-path.md)

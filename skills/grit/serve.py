@@ -22,6 +22,7 @@ Run:  python3 serve.py [--port N|0] [--host H] [--root DIR]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import os
@@ -186,7 +187,7 @@ def _await_publication(where: str, pid: int) -> Optional[dict[str, Any]]:
 @dataclass(frozen=True)
 class Judgment:
     """One verdict. Append-only: `session["judgments"]` keeps every one ever
-    cast, and the first entry is the one in effect (ADR 0006 addendum)."""
+    cast, and the first entry is the one in effect (ADR 0006)."""
 
     judgment: JudgmentVerdict
     message: str = ""
@@ -778,7 +779,7 @@ class State:
 
     def _read_project_log(self, path: str) -> Optional[dict[str, Any]]:
         """One project's authorship summary, or None when it has no log."""
-        log = os.path.join(path, ".grit", "authorship.jsonl")
+        log = os.path.join(_project_dir(self.root, path), "authorship.jsonl")
         if not os.path.exists(log):
             return None
         summary = ProjectAuthorship(project=path)
@@ -885,6 +886,14 @@ def _score_profile(root: str) -> dict[str, Any]:
             "headline": {"proven": 0, "recall": 0, "tracked": 0},
             "error": "%s: %s" % (type(exc).__name__, exc),
         }
+
+
+def _project_dir(root: str, cwd: str) -> str:
+    """Where a project's own state lives under `root` (a person's ~/.grit).
+    Mirrors hooks/grit-hook.py's helper of the same name — kept independent
+    since the hook has no import path back into this package."""
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
 
 
 def _hook_active() -> Optional[bool]:

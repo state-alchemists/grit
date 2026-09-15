@@ -51,6 +51,14 @@ EXIT_UNCHANGED = 2
 EXIT_UNVERIFIED = 3
 
 
+def _project_dir(root: str, cwd: str) -> str:
+    """Where this project's own state lives under `root` (normally HOME_ROOT).
+    Mirrors hooks/grit-hook.py's helper of the same name — kept independent
+    since the two scripts have no shared import."""
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
+
+
 def main() -> int:
     if len(sys.argv) < 3 or sys.argv[1] not in ("snapshot", "verify"):
         print(__doc__.strip().splitlines()[0])
@@ -124,7 +132,9 @@ def snapshot(task: str, cwd: str = ".") -> int:
         json.dump({"task": task, "before": state.to_dict()}, fh, indent=2)
     hook = (
         "yes"
-        if os.path.exists(os.path.join(cwd, ".grit", "authorship.jsonl"))
+        if os.path.exists(
+            os.path.join(_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
+        )
         else "no (or not yet)"
     )
     print("grit: snapshot taken for task %s" % task)
@@ -178,7 +188,7 @@ def _state(cwd: str = ".") -> Optional[TreeState]:
 
 
 def _store(cwd: str, task: str) -> str:
-    d = os.path.join(cwd, ".grit", "snapshots")
+    d = os.path.join(_project_dir(HOME_ROOT, cwd), "snapshots")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "%s.json" % str(task).replace("/", "_"))
 
@@ -203,7 +213,7 @@ def _assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
     is evidence, the other is absence of evidence, and collapsing them is how a
     measurement quietly becomes a flattering guess.
     """
-    path = os.path.join(cwd, ".grit", "authorship.jsonl")
+    path = os.path.join(_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
     if not os.path.exists(path):
         return _attribution_without_a_log(cwd)
     return _read_authorship_log(path, since_iso)

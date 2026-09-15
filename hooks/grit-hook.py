@@ -20,7 +20,7 @@ Design constraints this file must never violate:
 
 OFF SWITCHES
   GRIT_OFF=1               environment, kills it everywhere
-  touch .grit/off          per project
+  grit-hook.py --off       per project (run from the project directory)
   "ask_on_first_edit":false in ~/.grit/preferences.json — keeps the recording,
                            drops the prompt
 """
@@ -58,6 +58,17 @@ DEDUPE_WINDOW = 0.25
 # session, and nothing else prunes them, so without a bound this directory grows
 # for the life of the machine.
 ASK_MARKERS_KEPT = 200
+
+
+def _project_dir(root: str, cwd: str) -> str:
+    """Where this project's own state lives under `root` (normally HOME_ROOT).
+
+    Keyed by a hash of the real path rather than the path itself, so it is
+    always a safe, short directory name regardless of OS or path length. The
+    human-readable path lives separately, in ~/.grit/projects.json.
+    """
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
 
 
 def _lines(tool_input: dict[str, Any]) -> int:
@@ -186,6 +197,9 @@ def _prune_markers(marker_dir: str) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
+        _toggle_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
+        return
     raw = sys.stdin.read()
     event: dict[str, Any] = json.loads(raw or "{}")
 
@@ -218,10 +232,25 @@ def main() -> None:
 
 
 def _switched_off(cwd: str) -> bool:
-    """`GRIT_OFF=1` kills it everywhere; `.grit/off` kills it per project."""
+    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project."""
     if os.environ.get("GRIT_OFF") == "1":
         return True
-    return os.path.exists(os.path.join(cwd, ".grit", "off"))
+    return os.path.exists(os.path.join(_project_dir(HOME_ROOT, cwd), "off"))
+
+
+def _toggle_off(off: bool, cwd: str) -> None:
+    """`--off`/`--on` CLI: flip the per-project killswitch without needing to
+    know its hashed path."""
+    project_dir = _project_dir(HOME_ROOT, cwd)
+    marker = os.path.join(project_dir, "off")
+    if off:
+        os.makedirs(project_dir, exist_ok=True)
+        open(marker, "w").close()
+        print("grit: off for %s" % os.path.realpath(cwd))
+    else:
+        if os.path.exists(marker):
+            os.remove(marker)
+        print("grit: on for %s" % os.path.realpath(cwd))
 
 
 def _record_authorship(
@@ -230,10 +259,10 @@ def _record_authorship(
     """Append one authorship row. Recording must never cost the user an edit, so
     every failure here is swallowed."""
     try:
-        grit_dir = os.path.join(cwd, ".grit")
-        os.makedirs(grit_dir, exist_ok=True)
+        project_dir = _project_dir(HOME_ROOT, cwd)
+        os.makedirs(project_dir, exist_ok=True)
         with open(
-            os.path.join(grit_dir, "authorship.jsonl"), "a", encoding="utf-8"
+            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
         ) as fh:
             fh.write(json.dumps(_authorship_row(tool, event, tool_input)) + "\n")
         _remember_project(cwd)
@@ -296,8 +325,10 @@ def _record_offer(
     in this session" is a sound inference, and it is the only evidence this
     product has that anyone ever chose to do the work."""
     try:
+        project_dir = _project_dir(HOME_ROOT, cwd)
+        os.makedirs(project_dir, exist_ok=True)
         with open(
-            os.path.join(cwd, ".grit", "authorship.jsonl"), "a", encoding="utf-8"
+            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
         ) as fh:
             fh.write(
                 json.dumps(
@@ -327,7 +358,8 @@ def _ask_prompt(tool_input: dict[str, Any]) -> str:
                     'Approve to let it. Or reject and say "I\'ll do it" — the '
                     "assistant will break the work into steps, stay out of the way, "
                     "and check your result.\n"
-                    "This asks once per session. Silence it with: touch .grit/off"
+                    "This asks once per session. Silence it with: "
+                    "grit-hook.py --off (run from this project)"
                     % name
                 ),
             }

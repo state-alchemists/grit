@@ -12,7 +12,7 @@ Three separate processes write and read grit's state, and until now no document 
 - The dashboard fetched `/profile`, `/ledger` and `/tutorials` — all three structurally empty at the time — and **never read `.grit/authorship.jsonl`**, the only file with data in it. The working feature was invisible on its own dashboard. (Since [ADR 0009](0009-graded-score-from-capped-evidence.md) the profile is fed by repository work and is no longer empty.)
 - The page fetched once at load and never again, so it went stale the moment you started working.
 - The daemon ran in the foreground of whatever shell started it and died with that shell, which meant closing a terminal 404'd your own data.
-- The headline figure was a ring reading `0% proven+`, derived from a profile that [ADR 0010's addendum](0010-proficiency-decays-with-inactivity.md) establishes cannot be populated. The most prominent number on the page could never move.
+- The headline figure was a ring reading `0% proven+`, derived from a profile that nothing could populate until [ADR 0009](0009-graded-score-from-capped-evidence.md): before it, hand-written tutorials were the only evidence source, so a fresh installation showed an empty profile and the most prominent number on the page could never move.
 
 ## Decision
 
@@ -92,6 +92,6 @@ flowchart TD
 ## Backlinks
 
 - [ADR index](README.md)
-- [ADR 0010 — Proficiency decays](0010-proficiency-decays-with-inactivity.md) (addendum: why the profile is empty)
+- [ADR 0010 — Proficiency decays](0010-proficiency-decays-with-inactivity.md)
 - [ADR 0001 — Measure the effect](0001-measure-the-effect.md)
 - [ADR 0007 — Hooks must fail open](0007-hooks-must-fail-open.md)

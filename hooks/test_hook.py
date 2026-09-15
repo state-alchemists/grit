@@ -7,6 +7,7 @@ echo: an earlier version of this test used `echo` and the shell turned "\\n"
 into real newlines, producing invalid JSON that the hook swallowed silently.
 """
 
+import importlib.util
 import json
 import os
 import shutil
@@ -18,11 +19,30 @@ from dataclasses import dataclass
 from typing import Any, Optional
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "grit-hook.py")
 
+_hook_mod = None
 
-def rows(proj: str, author: Optional[str] = "assistant") -> list[dict[str, Any]]:
+
+def hook_module():
+    """Load grit-hook.py once, so tests can reuse its own `_project_dir` rather
+    than re-deriving the hash scheme a second time."""
+    global _hook_mod
+    if _hook_mod is None:
+        spec = importlib.util.spec_from_file_location("grit_hook", HOOK)
+        _hook_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_hook_mod)
+    return _hook_mod
+
+
+def project_dir(root: str, cwd: str) -> str:
+    return hook_module()._project_dir(root, cwd)
+
+
+def rows(
+    root: str, proj: str, author: Optional[str] = "assistant"
+) -> list[dict[str, Any]]:
     """Authorship rows only. The log also carries `offered` events now, and a
     count that includes them reads an offer as an edit."""
-    path = os.path.join(proj, ".grit", "authorship.jsonl")
+    path = os.path.join(project_dir(root, proj), "authorship.jsonl")
     out: list[dict[str, Any]] = []
     with open(path) as fh:
         for line in fh:
@@ -73,7 +93,7 @@ class HookFixture:
         return run(event, self.root, env)
 
     def rows(self, author: Optional[str] = "assistant") -> list[dict[str, Any]]:
-        return rows(self.proj, author)
+        return rows(self.root, self.proj, author)
 
     def count_rows(self) -> int:
         return len(self.rows())
@@ -94,6 +114,7 @@ def _properties():
         _property_edit_uses_new_string,
         _property_ignores_read_tools,
         _property_off_switches_work,
+        _property_off_switch_cli,
         _property_ask_can_be_disabled,
         _property_duplicate_event_counted_once,
         _property_identical_retry_is_not_swallowed,
@@ -173,11 +194,31 @@ def _property_off_switches_work(fx: HookFixture) -> None:
     assert (
         fx.run(fx.write_event(session="s5"), {"GRIT_OFF": "1"}) == ""
     ), "GRIT_OFF did not silence the hook"
-    open(os.path.join(fx.proj, ".grit", "off"), "w").close()
+    pdir = project_dir(fx.root, fx.proj)
+    os.makedirs(pdir, exist_ok=True)
+    open(os.path.join(pdir, "off"), "w").close()
     assert (
         fx.run(fx.write_event(session="s6")) == ""
-    ), ".grit/off did not silence the hook"
-    os.remove(os.path.join(fx.proj, ".grit", "off"))
+    ), "the per-project off marker did not silence the hook"
+    os.remove(os.path.join(pdir, "off"))
+
+
+def _property_off_switch_cli(fx: HookFixture) -> None:
+    # `grit-hook.py --off`/`--on` toggle the same marker `_switched_off` reads,
+    # without the caller needing to know its hashed path.
+    env = dict(os.environ, GRIT_ROOT=fx.root)
+    marker = os.path.join(project_dir(fx.root, fx.proj), "off")
+
+    sp.run(
+        [sys.executable, HOOK, "--off", fx.proj], env=env, capture_output=True, check=True
+    )
+    assert os.path.exists(marker), "--off did not create the marker"
+    assert fx.run(fx.write_event(session="cli-off")) == "", "--off did not silence the hook"
+
+    sp.run(
+        [sys.executable, HOOK, "--on", fx.proj], env=env, capture_output=True, check=True
+    )
+    assert not os.path.exists(marker), "--on did not remove the marker"
 
 
 def _property_ask_can_be_disabled(fx: HookFixture) -> None:
@@ -241,11 +282,7 @@ def _property_ask_markers_stay_bounded(fx: HookFixture) -> None:
     #
     # Reads the bound from the hook rather than restating it: a test that hard
     # codes 200 cannot notice the constant being raised.
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("grit_hook", HOOK)
-    hook_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(hook_mod)
+    hook_mod = hook_module()
 
     ask_dir = os.path.join(fx.root, "asked")
     assert os.path.isdir(ask_dir), "no marker directory was ever created"
@@ -270,14 +307,21 @@ def _property_garbage_input_is_safe_and_traced(fx: HookFixture) -> None:
     ), "a swallowed failure must leave a trace"
 
 
-def _verify_edit_cmd(repo: str, *args: str) -> int:
+def _verify_edit_cmd(repo: str, *args: str, root: Optional[str] = None) -> int:
     """Run verify_edit against `repo` and return its exit code, which is also
-    its machine-readable verdict."""
+    its machine-readable verdict. `root` stands in for ~/.grit (GRIT_ROOT) —
+    pass the same one used to run the hook against this repo, so both agree on
+    where the project's state lives."""
     path = os.path.join(
         os.path.dirname(os.path.dirname(HOOK)), "skills", "grit", "verify_edit.py"
     )
+    env = dict(os.environ, GRIT_ROOT=root) if root else os.environ
     return sp.run(
-        [sys.executable, path, *args, repo], cwd=repo, capture_output=True, text=True
+        [sys.executable, path, *args, repo],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
     ).returncode
 
 
@@ -285,9 +329,10 @@ def _property_verify_edit_distinguishes_outcomes(fx: HookFixture) -> None:
     # verify_edit distinguishes the four outcomes, and never upgrades
     # "nobody was watching" into "the human wrote it".
     repo = tempfile.mkdtemp(prefix="grit-git-")
+    root = tempfile.mkdtemp(prefix="grit-git-root-")
     try:
         _init_repo(repo)
-        ve = lambda *a: _verify_edit_cmd(repo, *a)
+        ve = lambda *a: _verify_edit_cmd(repo, *a, root=root)
 
         ve("snapshot", "t1")
         assert ve("verify", "t1") == 2, "no change must not read as earned"
@@ -307,13 +352,15 @@ def _property_verify_edit_distinguishes_outcomes(fx: HookFixture) -> None:
             0 if doctor.is_watching(repo) else 3
         ), "verdict must follow whether a hook is actually watching"
 
-        os.makedirs(os.path.join(repo, ".grit"), exist_ok=True)
-        open(os.path.join(repo, ".grit", "authorship.jsonl"), "w").close()
+        pdir = project_dir(root, repo)
+        os.makedirs(pdir, exist_ok=True)
+        open(os.path.join(pdir, "authorship.jsonl"), "w").close()
         ve("snapshot", "t2")
         open(os.path.join(repo, "a.py"), "a").write("z=3\n")
         assert ve("verify", "t2") == 0, "human edit with a live log = earned"
     finally:
         shutil.rmtree(repo, ignore_errors=True)
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def _property_shell_call_forces_unverified(fx: HookFixture) -> None:
@@ -323,9 +370,10 @@ def _property_shell_call_forces_unverified(fx: HookFixture) -> None:
     repo = tempfile.mkdtemp(prefix="grit-shell-")
     try:
         _init_repo(repo)
-        os.makedirs(os.path.join(repo, ".grit"), exist_ok=True)
-        open(os.path.join(repo, ".grit", "authorship.jsonl"), "w").close()
-        _verify_edit_cmd(repo, "snapshot", "t3")
+        pdir = project_dir(fx.root, repo)
+        os.makedirs(pdir, exist_ok=True)
+        open(os.path.join(pdir, "authorship.jsonl"), "w").close()
+        _verify_edit_cmd(repo, "snapshot", "t3", root=fx.root)
         fx.run(
             {
                 "tool_name": "Bash",
@@ -335,7 +383,7 @@ def _property_shell_call_forces_unverified(fx: HookFixture) -> None:
             }
         )
         open(os.path.join(repo, "a.py"), "a").write("w=4\n")
-        assert _verify_edit_cmd(repo, "verify", "t3") == 3, (
+        assert _verify_edit_cmd(repo, "verify", "t3", root=fx.root) == 3, (
             "a shell call in the window must force UNVERIFIED"
         )
     finally:
@@ -366,7 +414,9 @@ def _property_bash_is_opaque_and_silent(fx: HookFixture) -> None:
     }
     n = sum(
         1
-        for line in open(os.path.join(fx.proj, ".grit", "authorship.jsonl"))
+        for line in open(
+            os.path.join(project_dir(fx.root, fx.proj), "authorship.jsonl")
+        )
         if json.loads(line).get("author") == "assistant"
     )
     assert fx.run(bash) == "", "Bash must never trigger the prompt"
@@ -409,7 +459,9 @@ def _property_offer_is_recorded_distinctly(fx: HookFixture) -> None:
     # never made.
     offers = [
         json.loads(line)
-        for line in open(os.path.join(fx.proj, ".grit", "authorship.jsonl"))
+        for line in open(
+            os.path.join(project_dir(fx.root, fx.proj), "authorship.jsonl")
+        )
         if json.loads(line).get("event") == "offered"
     ]
     assert offers, "the once-per-session offer was never recorded"
@@ -423,6 +475,7 @@ def _property_fresh_repo_with_hook_scores(fx: HookFixture) -> None:
     # HUMAN-WRITTEN, not UNVERIFIED. Conflating "nobody watched" with "the
     # watcher saw nothing" made the first task in every new project unscoreable.
     repo2 = tempfile.mkdtemp(prefix="grit-fresh-")
+    root2 = tempfile.mkdtemp(prefix="grit-fresh-root-")
     try:
         _init_repo(repo2)
         skill = os.path.join(os.path.dirname(os.path.dirname(HOOK)), "skills", "grit")
@@ -431,12 +484,12 @@ def _property_fresh_repo_with_hook_scores(fx: HookFixture) -> None:
 
         watching = doctor.is_watching(repo2)
 
-        _verify_edit_cmd(repo2, "snapshot", "f1")
+        _verify_edit_cmd(repo2, "snapshot", "f1", root=root2)
         open(os.path.join(repo2, "a.py"), "a").write("y=2\n")
-        rc = _verify_edit_cmd(repo2, "verify", "f1")
+        rc = _verify_edit_cmd(repo2, "verify", "f1", root=root2)
 
         assert not os.path.exists(
-            os.path.join(repo2, ".grit", "authorship.jsonl")
+            os.path.join(project_dir(root2, repo2), "authorship.jsonl")
         ), "precondition: this repo should have no authorship log"
         expected = 0 if watching else 3
         assert rc == expected, "fresh repo with watching=%s should give %d, got %d" % (
@@ -446,6 +499,7 @@ def _property_fresh_repo_with_hook_scores(fx: HookFixture) -> None:
         )
     finally:
         shutil.rmtree(repo2, ignore_errors=True)
+        shutil.rmtree(root2, ignore_errors=True)
 
 
 if __name__ == "__main__":
