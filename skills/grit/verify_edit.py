@@ -51,14 +51,6 @@ EXIT_UNCHANGED = 2
 EXIT_UNVERIFIED = 3
 
 
-def _get_project_dir(root: str, cwd: str) -> str:
-    """Where this project's own state lives under `root` (normally HOME_ROOT).
-    Mirrors hooks/grit-hook.py's helper of the same name — kept independent
-    since the two scripts have no shared import."""
-    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
-    return os.path.join(root, "projects", key)
-
-
 def main() -> int:
     if len(sys.argv) < 3 or sys.argv[1] not in ("snapshot", "verify"):
         print(__doc__.strip().splitlines()[0])
@@ -67,6 +59,8 @@ def main() -> int:
     cmd, task = sys.argv[1], sys.argv[2]
     cwd = sys.argv[3] if len(sys.argv) > 3 else "."
     return (snapshot if cmd == "snapshot" else verify)(task, cwd)
+
+
 
 
 @dataclass(frozen=True)
@@ -103,6 +97,8 @@ class TreeState:
             or self.diff_sha != other.diff_sha
             or self.untracked != other.untracked
         )
+
+
 
 
 @dataclass(frozen=True)
@@ -183,12 +179,6 @@ def _get_tree_state(cwd: str = ".") -> Optional[TreeState]:
     )
 
 
-def _get_snapshot_path(cwd: str, task: str) -> str:
-    d = os.path.join(_get_project_dir(HOME_ROOT, cwd), "snapshots")
-    os.makedirs(d, exist_ok=True)
-    return os.path.join(d, "%s.json" % str(task).replace("/", "_"))
-
-
 def _load_snapshot(task: str, cwd: str) -> Optional[TreeState]:
     path = _get_snapshot_path(cwd, task)
     if not os.path.exists(path):
@@ -199,6 +189,12 @@ def _load_snapshot(task: str, cwd: str) -> Optional[TreeState]:
         return None
     with open(path, encoding="utf-8") as fh:
         return TreeState.from_dict(json.load(fh)["before"])
+
+
+def _get_snapshot_path(cwd: str, task: str) -> str:
+    d = os.path.join(_get_project_dir(HOME_ROOT, cwd), "snapshots")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "%s.json" % str(task).replace("/", "_"))
 
 
 def _get_assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
@@ -213,25 +209,6 @@ def _get_assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
     if not os.path.exists(path):
         return _attribution_without_a_log(cwd)
     return _read_authorship_log(path, since_iso)
-
-
-def _attribution_without_a_log(cwd: str) -> Optional[Attribution]:
-    """No log. Two very different situations, and conflating them cost the
-    first task in every fresh repository: with a hook wired up, an absent log
-    means the assistant has written nothing here — which is the DIY case and
-    should score. With no hook, nobody was watching.
-    """
-    try:
-        here = os.path.dirname(os.path.abspath(__file__))
-        if here not in sys.path:  # insert once; see serve.sibling()
-            sys.path.insert(0, here)
-        import doctor
-
-        if doctor.is_watching(os.path.abspath(cwd)):
-            return Attribution(lines=0, files=(), opaque=0)
-    except Exception:
-        pass
-    return None
 
 
 def _read_authorship_log(path: str, since_iso: str) -> Attribution:
@@ -256,6 +233,25 @@ def _read_authorship_log(path: str, since_iso: str) -> Attribution:
     return Attribution(lines=total, files=tuple(sorted(files)), opaque=opaque)
 
 
+def _attribution_without_a_log(cwd: str) -> Optional[Attribution]:
+    """No log. Two very different situations, and conflating them cost the
+    first task in every fresh repository: with a hook wired up, an absent log
+    means the assistant has written nothing here — which is the DIY case and
+    should score. With no hook, nobody was watching.
+    """
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:  # insert once; see serve.sibling()
+            sys.path.insert(0, here)
+        import doctor
+
+        if doctor.is_watching(os.path.abspath(cwd)):
+            return Attribution(lines=0, files=(), opaque=0)
+    except Exception:
+        pass
+    return None
+
+
 def _report_handover(
     task: str, before: TreeState, cwd: str, changed: bool
 ) -> None:
@@ -266,18 +262,6 @@ def _report_handover(
     if diff.strip():
         for line in diff.strip().splitlines()[-6:]:
             print("    %s" % line)
-
-
-def _git(*args: str, cwd: str = ".") -> Optional[str]:
-    """Run a git command. Returns None when git or the repo is unavailable,
-    rather than raising — a project without git is a supported situation."""
-    try:
-        out = subprocess.run(
-            ("git",) + args, cwd=cwd, capture_output=True, text=True, timeout=20
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.stdout if out.returncode == 0 else None
 
 
 def _decide_verdict(changed: bool, assistant: Optional[Attribution]) -> int:
@@ -340,6 +324,26 @@ def _report_assisted(assistant: Attribution) -> int:
         print("    %s" % f)
     print("  verdict: ASSISTED — the assistant wrote part of this.")
     return 1
+
+
+def _git(*args: str, cwd: str = ".") -> Optional[str]:
+    """Run a git command. Returns None when git or the repo is unavailable,
+    rather than raising — a project without git is a supported situation."""
+    try:
+        out = subprocess.run(
+            ("git",) + args, cwd=cwd, capture_output=True, text=True, timeout=20
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def _get_project_dir(root: str, cwd: str) -> str:
+    """Where this project's own state lives under `root` (normally HOME_ROOT).
+    Mirrors hooks/grit-hook.py's helper of the same name — kept independent
+    since the two scripts have no shared import."""
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
 
 
 if __name__ == "__main__":

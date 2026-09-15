@@ -60,31 +60,61 @@ DEDUPE_WINDOW = 0.25
 ASK_MARKERS_KEPT = 200
 
 
-def _get_project_dir(root: str, cwd: str) -> str:
-    """Where this project's own state lives under `root` (normally HOME_ROOT).
+def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
+        _set_project_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
+        return
+    raw = sys.stdin.read()
+    event: dict[str, Any] = json.loads(raw or "{}")
 
-    Keyed by a hash of the real path rather than the path itself, so it is
-    always a safe, short directory name regardless of OS or path length. The
-    human-readable path lives separately, in ~/.grit/projects.json.
-    """
-    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
-    return os.path.join(root, "projects", key)
+    tool = event.get("tool_name", "")
+    if tool not in WRITE_TOOLS and tool not in SHELL_TOOLS:
+        return
+
+    cwd = event.get("cwd") or os.getcwd()
+    if _is_switched_off(cwd):
+        return
+
+    # One event, one record — even when two registrations both match it.
+    if _is_duplicate(event):
+        return
+
+    tool_input = event.get("tool_input") or {}
+
+    # ── 1. Record. Always, silently. ─────────────────────────────────────────
+    _record_authorship(cwd, tool, event, tool_input)
+
+    # ── 2. Ask, once per session — on real edits only. ───────────────────────
+    # Bash is recorded but never prompts: most shell calls are reads and builds,
+    # and a prompt on each one is how this gets uninstalled.
+    if tool not in WRITE_TOOLS:
+        return
+    if not _should_ask(event):
+        return
+    _record_offer(cwd, event, tool_input)
+    print(_compose_ask_prompt(tool_input))
 
 
-def _count_lines(tool_input: dict[str, Any]) -> int:
-    """How many lines the assistant is about to write."""
-    text = tool_input.get("content")  # Write
-    if text is None:
-        text = tool_input.get("new_string", "")  # Edit
-    return len(str(text).splitlines())
+def _set_project_off(off: bool, cwd: str) -> None:
+    """`--off`/`--on` CLI: flip the per-project killswitch without needing to
+    know its hashed path."""
+    project_dir = _get_project_dir(HOME_ROOT, cwd)
+    marker = os.path.join(project_dir, "off")
+    if off:
+        os.makedirs(project_dir, exist_ok=True)
+        open(marker, "w").close()
+        print("grit: off for %s" % os.path.realpath(cwd))
+    else:
+        if os.path.exists(marker):
+            os.remove(marker)
+        print("grit: on for %s" % os.path.realpath(cwd))
 
 
-def _get_preferences() -> dict[str, Any]:
-    try:
-        with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+def _is_switched_off(cwd: str) -> bool:
+    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project."""
+    if os.environ.get("GRIT_OFF") == "1":
+        return True
+    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"))
 
 
 def _is_duplicate(event: dict[str, Any]) -> bool:
@@ -159,100 +189,6 @@ def _remember_event(path: str, key: str, now: float) -> None:
         pass
 
 
-def _already_asked(session_id: str) -> bool:
-    """One ask per session. The marker lives with the user's own state, not the
-    project, so it survives switching between repos in one session."""
-    if not session_id:
-        return True  # no id -> never nag
-    marker_dir = os.path.join(HOME_ROOT, "asked")
-    marker = os.path.join(marker_dir, str(session_id)[:64].replace("/", "_"))
-    if os.path.exists(marker):
-        return True
-    os.makedirs(marker_dir, exist_ok=True)
-    with open(marker, "w") as fh:
-        fh.write(datetime.now(timezone.utc).isoformat())
-    _prune_markers(marker_dir)
-    return False
-
-
-def _prune_markers(marker_dir: str) -> None:
-    """Keep the newest ASK_MARKERS_KEPT markers, drop the rest.
-
-    One file per session, and nothing else ever deletes them — so without a
-    bound, `~/.grit/asked/` accumulates for the life of the machine. Oldest
-    first, by mtime: a session that ended is never asked about again, so
-    forgetting the oldest costs nothing.
-    """
-    try:
-        entries = [
-            os.path.join(marker_dir, name) for name in os.listdir(marker_dir)
-        ]
-        if len(entries) <= ASK_MARKERS_KEPT:
-            return
-        entries.sort(key=os.path.getmtime)
-        for stale in entries[: len(entries) - ASK_MARKERS_KEPT]:
-            os.remove(stale)
-    except Exception:
-        pass  # housekeeping must never cost the user an edit
-
-
-def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
-        _set_project_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
-        return
-    raw = sys.stdin.read()
-    event: dict[str, Any] = json.loads(raw or "{}")
-
-    tool = event.get("tool_name", "")
-    if tool not in WRITE_TOOLS and tool not in SHELL_TOOLS:
-        return
-
-    cwd = event.get("cwd") or os.getcwd()
-    if _is_switched_off(cwd):
-        return
-
-    # One event, one record — even when two registrations both match it.
-    if _is_duplicate(event):
-        return
-
-    tool_input = event.get("tool_input") or {}
-
-    # ── 1. Record. Always, silently. ─────────────────────────────────────────
-    _record_authorship(cwd, tool, event, tool_input)
-
-    # ── 2. Ask, once per session — on real edits only. ───────────────────────
-    # Bash is recorded but never prompts: most shell calls are reads and builds,
-    # and a prompt on each one is how this gets uninstalled.
-    if tool not in WRITE_TOOLS:
-        return
-    if not _should_ask(event):
-        return
-    _record_offer(cwd, event, tool_input)
-    print(_compose_ask_prompt(tool_input))
-
-
-def _is_switched_off(cwd: str) -> bool:
-    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project."""
-    if os.environ.get("GRIT_OFF") == "1":
-        return True
-    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"))
-
-
-def _set_project_off(off: bool, cwd: str) -> None:
-    """`--off`/`--on` CLI: flip the per-project killswitch without needing to
-    know its hashed path."""
-    project_dir = _get_project_dir(HOME_ROOT, cwd)
-    marker = os.path.join(project_dir, "off")
-    if off:
-        os.makedirs(project_dir, exist_ok=True)
-        open(marker, "w").close()
-        print("grit: off for %s" % os.path.realpath(cwd))
-    else:
-        if os.path.exists(marker):
-            os.remove(marker)
-        print("grit: on for %s" % os.path.realpath(cwd))
-
-
 def _record_authorship(
     cwd: str, tool: str, event: dict[str, Any], tool_input: dict[str, Any]
 ) -> None:
@@ -290,6 +226,14 @@ def _compose_authorship_row(
     return row
 
 
+def _count_lines(tool_input: dict[str, Any]) -> int:
+    """How many lines the assistant is about to write."""
+    text = tool_input.get("content")  # Write
+    if text is None:
+        text = tool_input.get("new_string", "")  # Edit
+    return len(str(text).splitlines())
+
+
 def _remember_project(cwd: str) -> None:
     """Remember which projects have a log, so the dashboard can find them. The
     log is per-project but the dashboard is per-person, and without this pointer
@@ -317,6 +261,51 @@ def _should_ask(event: dict[str, Any]) -> bool:
     if _get_preferences().get("ask_on_first_edit") is False:
         return False
     return not _already_asked(event.get("session_id") or "")
+
+
+def _get_preferences() -> dict[str, Any]:
+    try:
+        with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _already_asked(session_id: str) -> bool:
+    """One ask per session. The marker lives with the user's own state, not the
+    project, so it survives switching between repos in one session."""
+    if not session_id:
+        return True  # no id -> never nag
+    marker_dir = os.path.join(HOME_ROOT, "asked")
+    marker = os.path.join(marker_dir, str(session_id)[:64].replace("/", "_"))
+    if os.path.exists(marker):
+        return True
+    os.makedirs(marker_dir, exist_ok=True)
+    with open(marker, "w") as fh:
+        fh.write(datetime.now(timezone.utc).isoformat())
+    _prune_markers(marker_dir)
+    return False
+
+
+def _prune_markers(marker_dir: str) -> None:
+    """Keep the newest ASK_MARKERS_KEPT markers, drop the rest.
+
+    One file per session, and nothing else ever deletes them — so without a
+    bound, `~/.grit/asked/` accumulates for the life of the machine. Oldest
+    first, by mtime: a session that ended is never asked about again, so
+    forgetting the oldest costs nothing.
+    """
+    try:
+        entries = [
+            os.path.join(marker_dir, name) for name in os.listdir(marker_dir)
+        ]
+        if len(entries) <= ASK_MARKERS_KEPT:
+            return
+        entries.sort(key=os.path.getmtime)
+        for stale in entries[: len(entries) - ASK_MARKERS_KEPT]:
+            os.remove(stale)
+    except Exception:
+        pass  # housekeeping must never cost the user an edit
 
 
 def _record_offer(
@@ -389,6 +378,17 @@ def _log_failure(exc: BaseException) -> None:
             )
     except Exception:
         pass
+
+
+def _get_project_dir(root: str, cwd: str) -> str:
+    """Where this project's own state lives under `root` (normally HOME_ROOT).
+
+    Keyed by a hash of the real path rather than the path itself, so it is
+    always a safe, short directory name regardless of OS or path length. The
+    human-readable path lives separately, in ~/.grit/projects.json.
+    """
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
 
 
 if __name__ == "__main__":
