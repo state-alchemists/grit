@@ -63,6 +63,8 @@ New tests follow the same shape. A test here is a **property**, named for what b
 
 **Define the caller before the callee, where practical.** Read top to bottom, entry point first, in the order the code actually runs. This was briefly an AST checker under bin/, deleted for enforcing pure taste with a 168-line call-graph walker that drove a whole rewrite and wasn't wired into anything. Keep the convention, drop the tooling — this is a code-review preference, not a build gate, and "where practical" means mutual recursion and shared helpers are exempt.
 
+**Names follow the A/HC/LC cheatsheet** ([kettanaito/naming-cheatsheet](https://github.com/kettanaito/naming-cheatsheet)): `prefix? + action + high context + low context`. Every function name carries an action verb or a boolean prefix — `_get_project_dir`, `_is_duplicate`, `_compose_authorship_row`, `_report_unverified` — never a bare noun (`_state`, `_store`, `_duplicate` are all past mistakes that got renamed). Booleans read as predicates (`is`/`has`/`should`). No contractions in identifiers (`get_preferences`, not `_prefs`). Prefer `compose`/`get`/`set`/`report`/`resolve` for pure data-shaping, and keep JSON API keys (`hook_active`) untouched by function renames.
+
 ---
 
 ## 4. Documentation

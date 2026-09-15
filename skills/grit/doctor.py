@@ -35,7 +35,7 @@ def main() -> int:
 
     print("grit doctor — project: %s\n" % project)
     checks: list[RegistrationCheck] = []
-    for label, path, reader in _sites(project):
+    for label, path, reader in _get_hook_sites(project):
         if not os.path.exists(path):
             continue
         entries = reader(path)
@@ -59,7 +59,7 @@ def main() -> int:
     return 0
 
 
-def _sites(project: str) -> list[tuple[str, str, Reader]]:
+def _get_hook_sites(project: str) -> list[tuple[str, str, Reader]]:
     """Every place a registration can hide, on this machine and this project."""
     home = os.path.expanduser("~")
     return [
@@ -164,7 +164,7 @@ def _report_site(
 
 def _inspect(label: str, command: str) -> RegistrationCheck:
     """Run the checks that matter for one registration."""
-    script = _script_of(command)
+    script = _get_script_path(command)
     return RegistrationCheck(
         label=label,
         command=command,
@@ -175,7 +175,7 @@ def _inspect(label: str, command: str) -> RegistrationCheck:
     )
 
 
-def _script_of(command: str) -> Optional[str]:
+def _get_script_path(command: str) -> Optional[str]:
     """The .py path inside a command string, however it is quoted."""
     try:
         for tok in shlex.split(command):
@@ -210,11 +210,11 @@ def is_watching(project: str) -> bool:
     assistant's first edit, which is precisely the case where the human did
     all the work.
     """
-    for _, path, reader in _sites(project):
+    for _, path, reader in _get_hook_sites(project):
         if not os.path.exists(path):
             continue
         for _, command in reader(path):
-            script = _script_of(command)
+            script = _get_script_path(command)
             if script and os.path.exists(script):
                 return True
     return False

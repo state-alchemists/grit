@@ -104,7 +104,7 @@ class EvidenceRow:
         """The on-disk shape. `failed` is omitted when False so the file stays
         byte-comparable with what earlier versions wrote."""
         row: dict[str, Any] = {
-            "at": self.at or _now(),
+            "at": self.at or _get_timestamp(),
             "concept": self.concept,
             "source": self.source,
             "assistance": self.assistance,
@@ -204,7 +204,7 @@ PROVEN_AT = 0.80
 STALE_DAYS = 90
 
 
-def _now() -> str:
+def _get_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -218,12 +218,12 @@ def _age_days(stamp: str, now: Optional[datetime] = None) -> int:
     return ((now or datetime.now(timezone.utc)) - then).days
 
 
-def evidence_path(root: str) -> str:
+def get_evidence_path(root: str) -> str:
     return os.path.join(root, "evidence.jsonl")
 
 
 def load(root: str) -> list[EvidenceRow]:
-    path = evidence_path(root)
+    path = get_evidence_path(root)
     if not os.path.exists(path):
         return []
     out: list[EvidenceRow] = []
@@ -236,7 +236,7 @@ def load(root: str) -> list[EvidenceRow]:
     return out
 
 
-def task_key(source: str, project: str, task: str) -> TaskKey:
+def compose_task_key(source: str, project: str, task: str) -> TaskKey:
     """The identity of a piece of work, for novelty and for the distinct-task count.
 
     Repository tasks are scoped by project: task ids are per-project sequences,
@@ -254,11 +254,11 @@ def task_key(source: str, project: str, task: str) -> TaskKey:
     return (source, "", task or "")
 
 
-def known_concepts(root: str) -> list[str]:
+def get_known_concepts(root: str) -> list[str]:
     return sorted({e.concept for e in load(root) if e.concept})
 
 
-def near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[str]:
+def get_near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[str]:
     """Existing concept names close enough to `concept` to be the same idea.
 
     Fragmentation is the silent failure of this model: `token-bucket`,
@@ -269,7 +269,7 @@ def near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[str]:
     A warning, never a block — the user owns their concept names, and two
     similar names are sometimes genuinely two things.
     """
-    existing = known_concepts(root)
+    existing = get_known_concepts(root)
     if concept in existing:
         return []
     norm: Callable[[str], str] = (
@@ -299,7 +299,7 @@ def record(
     if assistance not in ASSISTANCE:
         raise ValueError("assistance must be one of %s" % list(ASSISTANCE))
     row = EvidenceRow(
-        at=_now(),
+        at=_get_timestamp(),
         concept=concept,
         source=cast(Source, source),  # validated above
         assistance=cast(Assistance, assistance),  # validated above
@@ -311,7 +311,7 @@ def record(
         failed=failed,
     )
     os.makedirs(root, exist_ok=True)
-    with open(evidence_path(root), "a", encoding="utf-8") as fh:
+    with open(get_evidence_path(root), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row.to_dict()) + "\n")
     return row
 
@@ -351,7 +351,7 @@ def _fold_event(t: _Tally, ev: EvidenceRow, now: Optional[datetime]) -> None:
     t.passes += 1
     if ev.project:
         t.projects.add(ev.project)
-    key = task_key(ev.source, ev.project, ev.task)
+    key = compose_task_key(ev.source, ev.project, ev.task)
     t.total += _credit_for(t, ev, key, now)
     if ev.source == "repo" and ev.assistance == "none":
         t.unaided_tasks.add(key)
@@ -392,7 +392,7 @@ def _tally_to_score(t: _Tally) -> ConceptScore:
         unaided_repo=bool(t.unaided_tasks),
         unaided_tasks=len(t.unaided_tasks),
         projects=len(t.projects),
-        blocked_by=_blocked_reason(level, total, enough_unaided, len(t.unaided_tasks)),
+        blocked_by=_get_blocked_reason(level, total, enough_unaided, len(t.unaided_tasks)),
     )
 
 
@@ -404,7 +404,7 @@ def _level_for(total: float, enough_unaided: bool) -> Level:
     return "unproven"
 
 
-def _blocked_reason(
+def _get_blocked_reason(
     level: Level, total: float, enough_unaided: bool, unaided_count: int
 ) -> Optional[str]:
     """Why this concept is not `proven`, in the user's terms — or None when it
@@ -580,13 +580,13 @@ def _check_near_duplicate_detection() -> None:
     try:
         record(tmp, "token-bucket", "repo", "none", "t1", project="/p")
         for variant in ("token_bucket", "token-buckets", "Token-Bucket"):
-            assert near_duplicates(tmp, variant), (
+            assert get_near_duplicates(tmp, variant), (
                 "%s must be flagged against token-bucket" % variant
             )
-        assert not near_duplicates(
+        assert not get_near_duplicates(
             tmp, "middleware-ordering"
         ), "an unrelated concept must not be flagged"
-        assert not near_duplicates(
+        assert not get_near_duplicates(
             tmp, "token-bucket"
         ), "an exact match is not a duplicate, it is the same concept"
     finally:
@@ -635,7 +635,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _print_concepts(root: str) -> int:
-    names = known_concepts(root)
+    names = get_known_concepts(root)
     print(
         "\n".join(names)
         if names
@@ -674,7 +674,7 @@ def _warn_if_name_splits_evidence(root: str, concept: str) -> None:
     """A warning, never a block — the user owns their concept names. But a
     split concept can never reach `proven`, and nobody notices a near-duplicate
     name because each one looks reasonable on its own."""
-    dupes = near_duplicates(root, concept)
+    dupes = get_near_duplicates(root, concept)
     if not dupes:
         return
     print(

@@ -379,7 +379,7 @@ async function report(event, payload) {
 }
 
 // Clipboard fallback: a signed-ish token the user pastes into the assistant.
-function fallbackToken(event, payload) {
+function buildFallbackToken(event, payload) {
   const token = {
     v: 1,
     concept: document.title,
@@ -463,7 +463,7 @@ document.getElementById("submit-reason").onclick = async () => {
     "Not sent (" + res.reason + "). The assistant cannot see this yet.<br>" +
     "<button class='ghost' id='copy-token' style='margin-top:10px'>Copy handoff token</button>";
   document.getElementById("copy-token").onclick = async () => {
-    const token = fallbackToken("justification", {
+    const token = buildFallbackToken("justification", {
       concept: document.title, check_passed: passed, check_type: "sandbox", answer,
     });
     try {

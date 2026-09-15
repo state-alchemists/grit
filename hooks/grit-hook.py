@@ -4,9 +4,9 @@
 Two jobs, in order of how much they matter:
 
   1. RECORD who wrote the code. Every time the assistant writes bytes, that is
-     logged to <project>/.grit/authorship.jsonl. This is the only number in the
-     whole product that cannot be talked out of: it is not a self-report, it is
-     a count of tool calls that actually happened.
+     logged to ~/.grit/projects/<key>/authorship.jsonl. This is the only number
+     in the whole product that cannot be talked out of: it is not a self-report,
+     it is a count of tool calls that actually happened.
 
   2. ASK, ONCE. The first time the assistant reaches for the editor in a
      session, surface the choice. Once. After that this hook is silent for the
@@ -60,7 +60,7 @@ DEDUPE_WINDOW = 0.25
 ASK_MARKERS_KEPT = 200
 
 
-def _project_dir(root: str, cwd: str) -> str:
+def _get_project_dir(root: str, cwd: str) -> str:
     """Where this project's own state lives under `root` (normally HOME_ROOT).
 
     Keyed by a hash of the real path rather than the path itself, so it is
@@ -71,7 +71,7 @@ def _project_dir(root: str, cwd: str) -> str:
     return os.path.join(root, "projects", key)
 
 
-def _lines(tool_input: dict[str, Any]) -> int:
+def _count_lines(tool_input: dict[str, Any]) -> int:
     """How many lines the assistant is about to write."""
     text = tool_input.get("content")  # Write
     if text is None:
@@ -79,7 +79,7 @@ def _lines(tool_input: dict[str, Any]) -> int:
     return len(str(text).splitlines())
 
 
-def _prefs() -> dict[str, Any]:
+def _get_preferences() -> dict[str, Any]:
     try:
         with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
             return json.load(fh)
@@ -87,7 +87,7 @@ def _prefs() -> dict[str, Any]:
         return {}
 
 
-def _duplicate(event: dict[str, Any]) -> bool:
+def _is_duplicate(event: dict[str, Any]) -> bool:
     """True if this exact edit already came through moments ago.
 
     One edit can reach this hook more than once, for reasons that are all
@@ -108,7 +108,7 @@ def _duplicate(event: dict[str, Any]) -> bool:
     as an editable record. Dedupe must never cost a real edit; when in doubt it
     records, and two rows is the safe direction.
     """
-    key = _event_key(event)
+    key = _get_event_key(event)
     path = os.path.join(HOME_ROOT, ".last-event")
     now = time.time()
     if _seen_recently(path, key, now):
@@ -117,7 +117,7 @@ def _duplicate(event: dict[str, Any]) -> bool:
     return False
 
 
-def _event_key(event: dict[str, Any]) -> str:
+def _get_event_key(event: dict[str, Any]) -> str:
     """A stable fingerprint of this edit.
 
     hashlib, not hash(): Python salts hash() per process, so two invocations of
@@ -198,7 +198,7 @@ def _prune_markers(marker_dir: str) -> None:
 
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
-        _toggle_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
+        _set_project_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
         return
     raw = sys.stdin.read()
     event: dict[str, Any] = json.loads(raw or "{}")
@@ -208,11 +208,11 @@ def main() -> None:
         return
 
     cwd = event.get("cwd") or os.getcwd()
-    if _switched_off(cwd):
+    if _is_switched_off(cwd):
         return
 
     # One event, one record — even when two registrations both match it.
-    if _duplicate(event):
+    if _is_duplicate(event):
         return
 
     tool_input = event.get("tool_input") or {}
@@ -228,20 +228,20 @@ def main() -> None:
     if not _should_ask(event):
         return
     _record_offer(cwd, event, tool_input)
-    print(_ask_prompt(tool_input))
+    print(_compose_ask_prompt(tool_input))
 
 
-def _switched_off(cwd: str) -> bool:
+def _is_switched_off(cwd: str) -> bool:
     """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project."""
     if os.environ.get("GRIT_OFF") == "1":
         return True
-    return os.path.exists(os.path.join(_project_dir(HOME_ROOT, cwd), "off"))
+    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"))
 
 
-def _toggle_off(off: bool, cwd: str) -> None:
+def _set_project_off(off: bool, cwd: str) -> None:
     """`--off`/`--on` CLI: flip the per-project killswitch without needing to
     know its hashed path."""
-    project_dir = _project_dir(HOME_ROOT, cwd)
+    project_dir = _get_project_dir(HOME_ROOT, cwd)
     marker = os.path.join(project_dir, "off")
     if off:
         os.makedirs(project_dir, exist_ok=True)
@@ -259,18 +259,18 @@ def _record_authorship(
     """Append one authorship row. Recording must never cost the user an edit, so
     every failure here is swallowed."""
     try:
-        project_dir = _project_dir(HOME_ROOT, cwd)
+        project_dir = _get_project_dir(HOME_ROOT, cwd)
         os.makedirs(project_dir, exist_ok=True)
         with open(
             os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
         ) as fh:
-            fh.write(json.dumps(_authorship_row(tool, event, tool_input)) + "\n")
+            fh.write(json.dumps(_compose_authorship_row(tool, event, tool_input)) + "\n")
         _remember_project(cwd)
     except Exception:
         pass
 
 
-def _authorship_row(
+def _compose_authorship_row(
     tool: str, event: dict[str, Any], tool_input: dict[str, Any]
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
@@ -281,7 +281,7 @@ def _authorship_row(
     }
     if tool in WRITE_TOOLS:
         row["file"] = tool_input.get("file_path", "")
-        row["lines"] = _lines(tool_input)
+        row["lines"] = _count_lines(tool_input)
     else:
         # A shell command. We cannot know what it touched, so we say so rather
         # than recording a zero that reads like "wrote nothing".
@@ -293,16 +293,20 @@ def _authorship_row(
 def _remember_project(cwd: str) -> None:
     """Remember which projects have a log, so the dashboard can find them. The
     log is per-project but the dashboard is per-person, and without this pointer
-    the only working feature stays invisible."""
+    the only working feature stays invisible. Stored as the absolute real path:
+    the daemon re-derives the project key from this string from whatever
+    directory it was launched in, so a relative or symlinked spelling could
+    resolve to a different directory there than it did here."""
     reg = os.path.join(HOME_ROOT, "projects.json")
+    key = os.path.realpath(cwd)
     try:
         with open(reg, encoding="utf-8") as fh:
             known = json.load(fh)
     except Exception:
         known = []
-    if cwd in known:
+    if key in known:
         return
-    known.append(cwd)
+    known.append(key)
     os.makedirs(HOME_ROOT, exist_ok=True)
     with open(reg, "w", encoding="utf-8") as fh:
         json.dump(known[-50:], fh, indent=2)
@@ -310,7 +314,7 @@ def _remember_project(cwd: str) -> None:
 
 def _should_ask(event: dict[str, Any]) -> bool:
     """The once-per-session prompt, unless the user turned it off."""
-    if _prefs().get("ask_on_first_edit") is False:
+    if _get_preferences().get("ask_on_first_edit") is False:
         return False
     return not _already_asked(event.get("session_id") or "")
 
@@ -325,7 +329,7 @@ def _record_offer(
     in this session" is a sound inference, and it is the only evidence this
     product has that anyone ever chose to do the work."""
     try:
-        project_dir = _project_dir(HOME_ROOT, cwd)
+        project_dir = _get_project_dir(HOME_ROOT, cwd)
         os.makedirs(project_dir, exist_ok=True)
         with open(
             os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
@@ -346,7 +350,7 @@ def _record_offer(
         pass
 
 
-def _ask_prompt(tool_input: dict[str, Any]) -> str:
+def _compose_ask_prompt(tool_input: dict[str, Any]) -> str:
     name = os.path.basename(tool_input.get("file_path", "") or "this file")
     return json.dumps(
         {

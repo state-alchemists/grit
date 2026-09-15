@@ -234,7 +234,7 @@ class Session:
     that window must not strand the concept (ADR 0006).
 
     Mutable on purpose: gates arrive over time. `earned` is deliberately NOT a
-    field here — it is derived by `_earned()` from the gate dict, so no stored
+    field here — it is derived by `_is_earned()` from the gate dict, so no stored
     copy can contradict the gates it claims to summarise.
     """
 
@@ -292,7 +292,8 @@ class Session:
 
 @dataclass
 class ProjectAuthorship:
-    """One project's authorship tallies, read from its `.grit/authorship.jsonl`.
+    """One project's authorship tallies, read from its `projects/<key>/authorship.jsonl`
+    under the daemon root.
 
     `offers` counts sessions where the choice was put to the user; `taken`
     counts sessions where it was offered and no assistant edit followed — the
@@ -322,7 +323,7 @@ class ProjectAuthorship:
         }
 
 
-def _earned(session: Session) -> bool:
+def _is_earned(session: Session) -> bool:
     """The one definition of earned: all three gates present, the check still
     passing, the judgment sound.
 
@@ -353,17 +354,17 @@ class State:
         self.prefs_path = os.path.join(root, "preferences.json")
         self.tutorials_dir = os.path.join(root, "tutorials")
         os.makedirs(self.tutorials_dir, exist_ok=True)
-        self.ledger: dict[str, Any] = self._load()
+        self.ledger: dict[str, Any] = self._load_ledger()
         self._load_sessions()
 
-    def _load(self) -> dict[str, Any]:
+    def _load_ledger(self) -> dict[str, Any]:
         if os.path.exists(self.ledger_path):
             try:
                 with open(self.ledger_path, "r", encoding="utf-8") as fh:
                     return json.load(fh)
             except (json.JSONDecodeError, OSError):
                 # A corrupt ledger is a real event. Do not silently discard it.
-                backup = self.ledger_path + ".corrupt-" + _stamp()
+                backup = self.ledger_path + ".corrupt-" + _format_stamp()
                 try:
                     os.rename(self.ledger_path, backup)
                 except OSError:
@@ -375,8 +376,8 @@ class State:
                 }
         return {"version": 1, "entries": []}
 
-    def save(self) -> None:
-        write_json(self.ledger_path, self.ledger)
+    def save_ledger(self) -> None:
+        write_send_json(self.ledger_path, self.ledger)
 
     # ── Sessions survive a restart ───────────────────────────────────────────
     # Gate 3 is the assistant's verdict and may land minutes or hours after the
@@ -399,7 +400,7 @@ class State:
 
     def _save_sessions(self) -> None:
         """Caller holds the lock. Mode 0600: this file holds live credentials."""
-        write_json(
+        write_send_json(
             self.sessions_path,
             {
                 "sessions": {t: s.to_dict() for t, s in self.sessions.items()},
@@ -425,7 +426,7 @@ class State:
                 prefs[key] = value
         if prefs.get("theme") not in THEMES:
             prefs["theme"] = DEFAULT_PREFS["theme"]
-        write_json(self.prefs_path, prefs)
+        write_send_json(self.prefs_path, prefs)
         return prefs
 
     def open_session(
@@ -451,14 +452,14 @@ class State:
         report_token = secrets.token_urlsafe(24)
         judge_token = secrets.token_urlsafe(24)
         with self.lock:
-            self.sessions[report_token] = self._new_session(
+            self.sessions[report_token] = self._build_session(
                 concept, tutorial, routing_via
             )
             self.judge_index[judge_token] = report_token
             self._save_sessions()
         return report_token, judge_token
 
-    def _new_session(
+    def _build_session(
         self, concept: str, tutorial: str, routing_via: Optional[str]
     ) -> Session:
         return Session(
@@ -468,7 +469,7 @@ class State:
             sid=secrets.token_hex(8),
             concept=concept,
             tutorial=tutorial,
-            opened=_now(),
+            opened=_get_timestamp(),
             gates={},  # gate -> payload
             judgment="pending",
             # Why this tutorial fired. Without it the ADR 0012 audit cannot tell
@@ -492,7 +493,7 @@ class State:
             verification, err = self._apply_gate(session, gate, payload)
             if err:
                 return None, err
-            session.reports.append({"gate": gate, "at": _now()})
+            session.reports.append({"gate": gate, "at": _get_timestamp()})
             return self._commit(session, verification), None
 
     def _apply_gate(
@@ -504,7 +505,7 @@ class State:
             session.gates["check"] = CheckGate(
                 passed=bool(payload.get("passed")),
                 message=payload.get("message", ""),
-                at=_now(),
+                at=_get_timestamp(),
             ).to_dict()
             return "verified-by-execution", None
         if gate == "justification":
@@ -513,7 +514,7 @@ class State:
                 return "", "check-not-passed"
             session.gates["justification"] = JustificationGate(
                 answer=(payload.get("answer") or "").strip(),
-                at=_now(),
+                at=_get_timestamp(),
             ).to_dict()
             return "awaiting-judgment", None
         return "", "unknown-gate:" + gate
@@ -526,11 +527,11 @@ class State:
         return entry
 
     def _build_entry(self, session: Session, verification: str) -> dict[str, Any]:
-        entry = self._entry_for(session)
+        entry = self._get_entry_for(session)
         entry["verification"] = verification
         entry["gates_present"] = sorted(session.gates.keys())
         entry["gates_required"] = list(GATES)
-        entry["earned"] = _earned(session)
+        entry["earned"] = _is_earned(session)
         return entry
 
     def _upsert_ledger_entry(self, entry: dict[str, Any], session: Session) -> None:
@@ -540,7 +541,7 @@ class State:
             e for e in self.ledger["entries"] if e.get("session") != session.sid
         ]
         self.ledger["entries"].append(entry)
-        self.save()
+        self.save_ledger()
         self._save_sessions()
 
     def _score_once_if_final(self, session: Session, entry: dict[str, Any]) -> None:
@@ -570,7 +571,7 @@ class State:
         try:
             # No project: a tutorial is the same exercise wherever it is run,
             # so repeating it must decay regardless of which repo you are in.
-            sibling("score").record(
+            _import_sibling("score").record(
                 self.root,
                 concept,
                 "sandbox",
@@ -623,7 +624,7 @@ class State:
         an edit (ADR 0006).
         """
         stamped = Judgment(
-            judgment=cast(JudgmentVerdict, judgment), message=message, at=_now()
+            judgment=cast(JudgmentVerdict, judgment), message=message, at=_get_timestamp()
         ).to_dict()
         session.judgments.append(stamped)
         if len(session.judgments) > 1:
@@ -636,11 +637,11 @@ class State:
         """A later verdict is kept for audit and changes nothing."""
         first = session.judgments[0]
         self._save_sessions()
-        amended = self._entry_for(session)
-        # Derive it here too: `_entry_for` does not set `earned` (only `_commit`
+        amended = self._get_entry_for(session)
+        # Derive it here too: `_get_entry_for` does not set `earned` (only `_commit`
         # does), and an amendment must never be ambiguous about what currently
         # holds.
-        amended["earned"] = _earned(session)
+        amended["earned"] = _is_earned(session)
         return amended, (
             "already-judged:%s (amendment #%d recorded; the first "
             "verdict stands and the score is unchanged)"
@@ -659,7 +660,7 @@ class State:
         session.gates["judgment"] = dict(stamped)
         return self._commit(session, "judged-" + stamped["judgment"])
 
-    def _entry_for(self, session: Session) -> dict[str, Any]:
+    def _get_entry_for(self, session: Session) -> dict[str, Any]:
         return {
             "session": session.sid,
             "concept": session.concept,
@@ -674,7 +675,7 @@ class State:
             "gates": session.gates,
         }
 
-    def view_of_tutorial(
+    def summarise_tutorial(
         self, name: str, entries: list[dict[str, Any]]
     ) -> dict[str, str]:
         """Summarise a tutorial's most recent attempt. Newest wins, because a
@@ -770,7 +771,7 @@ class State:
         return {
             "projects": out,
             "totals": totals,
-            "hook_active": _hook_active(),
+            "hook_active": _is_hook_active(),
             "note": (
                 "Assistant-authored only. Your own edits are not "
                 "observed, so there is no percentage here to report."
@@ -779,7 +780,7 @@ class State:
 
     def _read_project_log(self, path: str) -> Optional[dict[str, Any]]:
         """One project's authorship summary, or None when it has no log."""
-        log = os.path.join(_project_dir(self.root, path), "authorship.jsonl")
+        log = os.path.join(_get_project_dir(self.root, path), "authorship.jsonl")
         if not os.path.exists(log):
             return None
         summary = ProjectAuthorship(project=path)
@@ -825,7 +826,7 @@ class State:
         if row.get("file"):
             summary.files.add(row["file"])
 
-    def concept_of(self, tutorial_name: str) -> tuple[str, str]:
+    def resolve_concept(self, tutorial_name: str) -> tuple[str, str]:
         """Resolve (concept, routing_via) for a tutorial file.
 
         Concept identity must not be the filename (ADR 0009) — two tutorials
@@ -846,7 +847,7 @@ class State:
         return os.path.splitext(tutorial_name)[0], "unknown"
 
 
-def sibling(name: str) -> ModuleType:
+def _import_sibling(name: str) -> ModuleType:
     """Import a module from this skill's own directory.
 
     The skill ships as a flat folder with no package, so siblings load by path.
@@ -859,7 +860,7 @@ def sibling(name: str) -> ModuleType:
     return importlib.import_module(name)
 
 
-def write_json(path: str, data: Any, mode: Optional[int] = None) -> None:
+def write_send_json(path: str, data: Any, mode: Optional[int] = None) -> None:
     """Write JSON atomically: temp file, then rename.
 
     Every file here is state a crash must not half-write; a truncated
@@ -879,7 +880,7 @@ def _score_profile(root: str) -> dict[str, Any]:
     """Per-concept levels from evidence.jsonl. Imported lazily and defensively:
     the dashboard must still render if scoring is missing or broken."""
     try:
-        return sibling("score").profile(root).to_dict()
+        return _import_sibling("score").profile(root).to_dict()
     except Exception as exc:
         return {
             "concepts": {},
@@ -888,7 +889,7 @@ def _score_profile(root: str) -> dict[str, Any]:
         }
 
 
-def _project_dir(root: str, cwd: str) -> str:
+def _get_project_dir(root: str, cwd: str) -> str:
     """Where a project's own state lives under `root` (a person's ~/.grit).
     Mirrors hooks/grit-hook.py's helper of the same name — kept independent
     since the hook has no import path back into this package."""
@@ -896,7 +897,7 @@ def _project_dir(root: str, cwd: str) -> str:
     return os.path.join(root, "projects", key)
 
 
-def _hook_active() -> Optional[bool]:
+def _is_hook_active() -> Optional[bool]:
     """Is a grit hook actually registered and runnable for this user, right now?
 
     `doctor.is_watching` already answers this without spawning the hook, so it
@@ -906,12 +907,12 @@ def _hook_active() -> Optional[bool]:
     is not being recorded when it is.
     """
     try:
-        return bool(sibling("doctor").is_watching(os.path.expanduser("~")))
+        return bool(_import_sibling("doctor").is_watching(os.path.expanduser("~")))
     except Exception:
         return None
 
 
-def _now() -> str:
+def _get_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -930,11 +931,11 @@ def _parse_iso(value: Any) -> Optional[datetime]:
     return dt
 
 
-def _stamp() -> str:
+def _format_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _host_of(server: Any) -> str:
+def _get_host_of(server: Any) -> str:
     """The bound host as a string.
 
     `server_address` is typed as a union (TCP gives a 2-tuple, a Unix socket a
@@ -945,7 +946,7 @@ def _host_of(server: Any) -> str:
     return address[0] if isinstance(address, tuple) else "127.0.0.1"
 
 
-def _port_of(server: Any) -> int:
+def _get_port_of(server: Any) -> int:
     """The actually-bound port. `--port 0` means the kernel chose, so the
     answer must come from the socket and never from the requested value."""
     address = server.server_address
@@ -979,7 +980,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _dashboard(self) -> str:
+    def _read_dashboard(self) -> str:
         """The dashboard is a static file next to this daemon, not a Python
         f-string. It is the product's face and it changes often; templating it
         in here meant every colour tweak risked a server-side syntax error."""
@@ -1005,7 +1006,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Vary", "Origin")
         self.send_header("X-Content-Type-Options", "nosniff")
 
-    def _json(self, code: int, obj: Any) -> None:
+    def _send_json(self, code: int, obj: Any) -> None:
         body = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -1045,44 +1046,44 @@ class Handler(BaseHTTPRequestHandler):
             return handler()
         if path.startswith("/tutorial/"):
             return self._serve_tutorial_file()
-        return self._json(404, {"error": "not found"})
+        return self._send_json(404, {"error": "not found"})
 
     def _serve_dashboard(self) -> None:
-        self._send_html(200, self._dashboard())
+        self._send_html(200, self._read_dashboard())
 
     def _serve_health(self) -> None:
-        self._json(200, {"ok": True, "root": self.state.root})
+        self._send_json(200, {"ok": True, "root": self.state.root})
 
     def _serve_preferences(self) -> None:
-        self._json(200, self.state.load_prefs())
+        self._send_json(200, self.state.load_prefs())
 
     def _serve_score(self) -> None:
         """`/score` and `/profile` share this. Kept as an alias so nothing that
         already points at `/profile` breaks; there is one profile now, and
         score.py owns it (ADR 0009)."""
-        self._json(200, _score_profile(self.state.root))
+        self._send_json(200, _score_profile(self.state.root))
 
     def _serve_authorship(self) -> None:
-        self._json(200, self.state.authorship())
+        self._send_json(200, self.state.authorship())
 
     def _serve_themes(self) -> None:
-        self._json(200, {"themes": list(THEMES)})
+        self._send_json(200, {"themes": list(THEMES)})
 
     def _serve_ledger(self) -> None:
         with self.state.lock:
-            self._json(200, self.state.ledger)
+            self._send_json(200, self.state.ledger)
 
     def _serve_status(self) -> None:
         """One request instead of several shell round-trips. What is wired up,
         what has been recorded, and what is not built — the three things an
         explicit `/grit` has to answer."""
-        return self._json(
+        return self._send_json(
             200,
             {
                 "score": _score_profile(self.state.root),
                 "daemon": {
                     "url": "http://%s:%d"
-                    % (_host_of(self.server), _port_of(self.server)),
+                    % (_get_host_of(self.server), _get_port_of(self.server)),
                     "root": self.state.root,
                 },
                 "authorship": self.state.authorship(),
@@ -1109,17 +1110,17 @@ class Handler(BaseHTTPRequestHandler):
                 if f.endswith(".html")
             )
             entries = list(self.state.ledger.get("entries", []))
-        return self._json(
+        return self._send_json(
             200,
             {
                 "tutorials": [
-                    {"name": n, **self.state.view_of_tutorial(n, entries)}
+                    {"name": n, **self.state.summarise_tutorial(n, entries)}
                     for n in names
                 ]
             },
         )
 
-    def _tutorial_path_or_none(self) -> Optional[str]:
+    def _resolve_tutorial_path(self) -> Optional[str]:
         """Resolve `/tutorial/<name>` to a real file inside tutorials_dir, or
         None. The `abspath` prefix test is what stops `../` escaping the
         directory — a name is untrusted input from the URL."""
@@ -1133,9 +1134,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_tutorial_file(self) -> None:
         """Serve a tutorial by name, injecting a fresh session token."""
-        path = self._tutorial_path_or_none()
+        path = self._resolve_tutorial_path()
         if path is None:
-            return self._json(404, {"error": "no such tutorial"})
+            return self._send_json(404, {"error": "no such tutorial"})
         html = self._launch_session(path)
         self._write_html(200, html)
 
@@ -1149,9 +1150,9 @@ class Handler(BaseHTTPRequestHandler):
         # `<file>.meta.json` — `x.html` -> `x.html.meta.json` — holding
         # {"concept": "token-bucket", "via": "..."}; fall back to the stem so
         # hand-copied tutorials still work.
-        concept, via = self.state.concept_of(name)
+        concept, via = self.state.resolve_concept(name)
         token, judge_token = self.state.open_session(concept, path, routing_via=via)
-        base = "http://%s:%d" % (_host_of(self.server), _port_of(self.server))
+        base = "http://%s:%d" % (_get_host_of(self.server), _get_port_of(self.server))
         self._print_judge_command(concept, base, judge_token)
         with open(path, "r", encoding="utf-8") as fh:
             html = fh.read()
@@ -1189,13 +1190,13 @@ class Handler(BaseHTTPRequestHandler):
         """Route a write request. Each branch is one named handler."""
         payload = self._read_json_body()
         if payload is None:
-            return self._json(400, {"error": "bad json"})
+            return self._send_json(400, {"error": "bad json"})
 
         parts = [p for p in self.path.split("/") if p]
 
         # /preferences — the dashboard's only write. Onboarding lands here.
         if parts == ["preferences"]:
-            return self._json(200, self.state.save_prefs(payload))
+            return self._send_json(200, self.state.save_prefs(payload))
 
         # /judgment/<judge-token> — gate 3, on a SEPARATE path and a separate
         # credential. Never reachable with the token the page holds.
@@ -1206,7 +1207,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "tutorial":
             return self._post_tutorial_gate(parts[1], parts[2], payload)
 
-        return self._json(404, {"error": "not found"})
+        return self._send_json(404, {"error": "not found"})
 
     def _read_json_body(self) -> Optional[dict[str, Any]]:
         """The request body as a dict, or None when it is not valid JSON."""
@@ -1226,8 +1227,8 @@ class Handler(BaseHTTPRequestHandler):
         if err:
             return self._refuse_judgment(err, entry)
         if entry is None:  # pragma: no cover — judge() returns one or the other
-            return self._json(500, {"error": "judged but no row produced"})
-        return self._json(
+            return self._send_json(500, {"error": "judged but no row produced"})
+        return self._send_json(
             200,
             {
                 "ok": True,
@@ -1244,7 +1245,7 @@ class Handler(BaseHTTPRequestHandler):
         so the caller sees exactly what holds, rather than a bare error it
         might retry blindly."""
         if err.startswith("already-judged:") and entry:
-            return self._json(
+            return self._send_json(
                 409,
                 {
                     "error": err,
@@ -1259,7 +1260,7 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 },
             )
-        return self._json(400, {"error": err})
+        return self._send_json(400, {"error": err})
 
     def _post_tutorial_gate(
         self, report_token: str, event: str, payload: dict[str, Any]
@@ -1268,7 +1269,7 @@ class Handler(BaseHTTPRequestHandler):
         if event == "judgment":
             # The page asking to judge itself is the attack this split exists
             # to stop. Refuse loudly rather than 404.
-            return self._json(
+            return self._send_json(
                 403,
                 {
                     "error": "judgment-requires-judge-token",
@@ -1276,14 +1277,14 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         if event not in ("check", "justification"):
-            return self._json(404, {"error": "unknown event " + event})
+            return self._send_json(404, {"error": "unknown event " + event})
 
         entry, err = self.state.record(report_token, event, payload)
         if err:
-            return self._json(400, {"error": err})
+            return self._send_json(400, {"error": err})
         if entry is None:  # pragma: no cover — record() returns one or the other
-            return self._json(500, {"error": "gate recorded but no row produced"})
-        return self._json(
+            return self._send_json(500, {"error": "gate recorded but no row produced"})
+        return self._send_json(
             200,
             {
                 "ok": True,
@@ -1344,16 +1345,16 @@ def _publish_address(
     connection means "start the daemon", not "the daemon is broken".
     """
     # --port 0 means the kernel chose; ask the socket what we actually got.
-    url = "http://%s:%d" % (args.host, _port_of(server))
+    url = "http://%s:%d" % (args.host, _get_port_of(server))
     with open(where, "w", encoding="utf-8") as fh:
         json.dump(
             {
                 "url": url,
                 "host": args.host,
-                "port": _port_of(server),
+                "port": _get_port_of(server),
                 "pid": os.getpid(),
                 "root": args.root,
-                "started": _now(),
+                "started": _get_timestamp(),
             },
             fh,
             indent=2,

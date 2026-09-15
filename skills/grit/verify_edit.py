@@ -51,7 +51,7 @@ EXIT_UNCHANGED = 2
 EXIT_UNVERIFIED = 3
 
 
-def _project_dir(root: str, cwd: str) -> str:
+def _get_project_dir(root: str, cwd: str) -> str:
     """Where this project's own state lives under `root` (normally HOME_ROOT).
     Mirrors hooks/grit-hook.py's helper of the same name — kept independent
     since the two scripts have no shared import."""
@@ -123,17 +123,17 @@ class Attribution:
 
 
 def snapshot(task: str, cwd: str = ".") -> int:
-    state = _state(cwd)
+    state = _get_tree_state(cwd)
     if state is None:
         print("grit: not a git repository — cannot snapshot %s" % cwd)
         print("      verify will report attribution as 'unverified'.")
         return 1
-    with open(_store(cwd, task), "w", encoding="utf-8") as fh:
+    with open(_get_snapshot_path(cwd, task), "w", encoding="utf-8") as fh:
         json.dump({"task": task, "before": state.to_dict()}, fh, indent=2)
     hook = (
         "yes"
         if os.path.exists(
-            os.path.join(_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
+            os.path.join(_get_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
         )
         else "no (or not yet)"
     )
@@ -148,25 +148,22 @@ def verify(task: str, cwd: str = ".") -> int:
     before = _load_snapshot(task, cwd)
     if before is None:
         return 1
-    after = _state(cwd)
+    after = _get_tree_state(cwd)
     if after is None:
         print("grit: not a git repository — attribution unverified")
         return 1
 
     changed = after.differs_from(before)
-    assistant = _assistant_lines(cwd, before.at)
+    assistant = _get_assistant_lines(cwd, before.at)
     _report_handover(task, before, cwd, changed)
-    return _verdict(changed, assistant)
+    return _decide_verdict(changed, assistant)
 
 
-def _state(cwd: str = ".") -> Optional[TreeState]:
+def _get_tree_state(cwd: str = ".") -> Optional[TreeState]:
     head = _git("rev-parse", "HEAD", cwd=cwd)
     if head is None:
         return None
-    # Exclude .grit/ everywhere. Taking a snapshot writes a file under .grit/,
-    # which would otherwise show up as a working-tree change and make every
-    # verify report "yes, something changed" — the tool detecting itself.
-    diff = _git("diff", "HEAD", "--", ".", ":(exclude).grit", cwd=cwd) or ""
+    diff = _git("diff", "HEAD", "--", ".", cwd=cwd) or ""
     untracked = (
         _git(
             "ls-files",
@@ -174,7 +171,6 @@ def _state(cwd: str = ".") -> Optional[TreeState]:
             "--exclude-standard",
             "--",
             ".",
-            ":(exclude).grit",
             cwd=cwd,
         )
         or ""
@@ -187,14 +183,14 @@ def _state(cwd: str = ".") -> Optional[TreeState]:
     )
 
 
-def _store(cwd: str, task: str) -> str:
-    d = os.path.join(_project_dir(HOME_ROOT, cwd), "snapshots")
+def _get_snapshot_path(cwd: str, task: str) -> str:
+    d = os.path.join(_get_project_dir(HOME_ROOT, cwd), "snapshots")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "%s.json" % str(task).replace("/", "_"))
 
 
 def _load_snapshot(task: str, cwd: str) -> Optional[TreeState]:
-    path = _store(cwd, task)
+    path = _get_snapshot_path(cwd, task)
     if not os.path.exists(path):
         print(
             "grit: no snapshot for task %s — run `snapshot %s` at handover"
@@ -205,7 +201,7 @@ def _load_snapshot(task: str, cwd: str) -> Optional[TreeState]:
         return TreeState.from_dict(json.load(fh)["before"])
 
 
-def _assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
+def _get_assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
     """Lines the assistant is *observed* to have written since the snapshot.
 
     Returns None when there is no authorship log at all — which means no hook is
@@ -213,7 +209,7 @@ def _assistant_lines(cwd: str, since_iso: str) -> Optional[Attribution]:
     is evidence, the other is absence of evidence, and collapsing them is how a
     measurement quietly becomes a flattering guess.
     """
-    path = os.path.join(_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
+    path = os.path.join(_get_project_dir(HOME_ROOT, cwd), "authorship.jsonl")
     if not os.path.exists(path):
         return _attribution_without_a_log(cwd)
     return _read_authorship_log(path, since_iso)
@@ -264,10 +260,7 @@ def _report_handover(
     task: str, before: TreeState, cwd: str, changed: bool
 ) -> None:
     """Print the header and the diff stat — what happened, before the verdict."""
-    diff = (
-        _git("diff", "--stat", before.head, "--", ".", ":(exclude).grit", cwd=cwd)
-        or ""
-    )
+    diff = _git("diff", "--stat", before.head, "--", ".", cwd=cwd) or ""
     print("grit: task %s" % task)
     print("  changed since handover: %s" % ("yes" if changed else "NO"))
     if diff.strip():
@@ -287,7 +280,7 @@ def _git(*args: str, cwd: str = ".") -> Optional[str]:
     return out.stdout if out.returncode == 0 else None
 
 
-def _verdict(changed: bool, assistant: Optional[Attribution]) -> int:
+def _decide_verdict(changed: bool, assistant: Optional[Attribution]) -> int:
     """The outcome, in the order that matters: nothing changed, then nobody
     watching, then what the watcher saw."""
     if not changed:
@@ -297,13 +290,13 @@ def _verdict(changed: bool, assistant: Optional[Attribution]) -> int:
         )
         return EXIT_UNCHANGED
     if assistant is None:
-        return _verdict_unverified()
+        return _report_unverified()
     if assistant.lines == 0:
-        return _verdict_no_observed_edits(assistant)
-    return _verdict_assisted(assistant)
+        return _report_no_observed_edits(assistant)
+    return _report_assisted(assistant)
 
 
-def _verdict_unverified() -> int:
+def _report_unverified() -> int:
     print("  assistant edits: no authorship log — no hook on this runtime")
     print(
         "  verdict: UNVERIFIED. The work happened; who wrote it is not "
@@ -314,7 +307,7 @@ def _verdict_unverified() -> int:
     return EXIT_UNVERIFIED
 
 
-def _verdict_no_observed_edits(assistant: Attribution) -> int:
+def _report_no_observed_edits(assistant: Attribution) -> int:
     """Zero observed edits, and whether that is evidence of anything.
 
     The decisive case: zero observed edits is NOT evidence of a human author
@@ -338,7 +331,7 @@ def _verdict_no_observed_edits(assistant: Attribution) -> int:
     return 0
 
 
-def _verdict_assisted(assistant: Attribution) -> int:
+def _report_assisted(assistant: Attribution) -> int:
     print(
         "  assistant edits: %d lines across %d file(s)"
         % (assistant.lines, len(assistant.files))

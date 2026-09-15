@@ -313,7 +313,7 @@ def _property_stale_pending_shows_its_age(fx: Fixture, root: str) -> None:
     def view(opened: str) -> dict[str, str]:
         entry = _get(fx.base, "/ledger")["entries"][-1]
         entry["opened"] = opened
-        return serve.State(root).view_of_tutorial("tb.html", [entry])
+        return serve.State(root).summarise_tutorial("tb.html", [entry])
 
     tok = fx.launch_and_check(answer="pending forever")
     assert fx.last_entry()["tutorial"].endswith("tb.html"), fx.last_entry()

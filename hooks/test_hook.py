@@ -23,7 +23,7 @@ _hook_mod = None
 
 
 def hook_module():
-    """Load grit-hook.py once, so tests can reuse its own `_project_dir` rather
+    """Load grit-hook.py once, so tests can reuse its own `_get_project_dir` rather
     than re-deriving the hash scheme a second time."""
     global _hook_mod
     if _hook_mod is None:
@@ -33,8 +33,8 @@ def hook_module():
     return _hook_mod
 
 
-def project_dir(root: str, cwd: str) -> str:
-    return hook_module()._project_dir(root, cwd)
+def get_project_dir(root: str, cwd: str) -> str:
+    return hook_module()._get_project_dir(root, cwd)
 
 
 def rows(
@@ -42,7 +42,7 @@ def rows(
 ) -> list[dict[str, Any]]:
     """Authorship rows only. The log also carries `offered` events now, and a
     count that includes them reads an offer as an edit."""
-    path = os.path.join(project_dir(root, proj), "authorship.jsonl")
+    path = os.path.join(get_project_dir(root, proj), "authorship.jsonl")
     out: list[dict[str, Any]] = []
     with open(path) as fh:
         for line in fh:
@@ -194,7 +194,7 @@ def _property_off_switches_work(fx: HookFixture) -> None:
     assert (
         fx.run(fx.write_event(session="s5"), {"GRIT_OFF": "1"}) == ""
     ), "GRIT_OFF did not silence the hook"
-    pdir = project_dir(fx.root, fx.proj)
+    pdir = get_project_dir(fx.root, fx.proj)
     os.makedirs(pdir, exist_ok=True)
     open(os.path.join(pdir, "off"), "w").close()
     assert (
@@ -204,10 +204,10 @@ def _property_off_switches_work(fx: HookFixture) -> None:
 
 
 def _property_off_switch_cli(fx: HookFixture) -> None:
-    # `grit-hook.py --off`/`--on` toggle the same marker `_switched_off` reads,
+    # `grit-hook.py --off`/`--on` toggle the same marker `_is_switched_off` reads,
     # without the caller needing to know its hashed path.
     env = dict(os.environ, GRIT_ROOT=fx.root)
-    marker = os.path.join(project_dir(fx.root, fx.proj), "off")
+    marker = os.path.join(get_project_dir(fx.root, fx.proj), "off")
 
     sp.run(
         [sys.executable, HOOK, "--off", fx.proj], env=env, capture_output=True, check=True
@@ -352,7 +352,7 @@ def _property_verify_edit_distinguishes_outcomes(fx: HookFixture) -> None:
             0 if doctor.is_watching(repo) else 3
         ), "verdict must follow whether a hook is actually watching"
 
-        pdir = project_dir(root, repo)
+        pdir = get_project_dir(root, repo)
         os.makedirs(pdir, exist_ok=True)
         open(os.path.join(pdir, "authorship.jsonl"), "w").close()
         ve("snapshot", "t2")
@@ -370,7 +370,7 @@ def _property_shell_call_forces_unverified(fx: HookFixture) -> None:
     repo = tempfile.mkdtemp(prefix="grit-shell-")
     try:
         _init_repo(repo)
-        pdir = project_dir(fx.root, repo)
+        pdir = get_project_dir(fx.root, repo)
         os.makedirs(pdir, exist_ok=True)
         open(os.path.join(pdir, "authorship.jsonl"), "w").close()
         _verify_edit_cmd(repo, "snapshot", "t3", root=fx.root)
@@ -415,7 +415,7 @@ def _property_bash_is_opaque_and_silent(fx: HookFixture) -> None:
     n = sum(
         1
         for line in open(
-            os.path.join(project_dir(fx.root, fx.proj), "authorship.jsonl")
+            os.path.join(get_project_dir(fx.root, fx.proj), "authorship.jsonl")
         )
         if json.loads(line).get("author") == "assistant"
     )
@@ -460,7 +460,7 @@ def _property_offer_is_recorded_distinctly(fx: HookFixture) -> None:
     offers = [
         json.loads(line)
         for line in open(
-            os.path.join(project_dir(fx.root, fx.proj), "authorship.jsonl")
+            os.path.join(get_project_dir(fx.root, fx.proj), "authorship.jsonl")
         )
         if json.loads(line).get("event") == "offered"
     ]
@@ -489,7 +489,7 @@ def _property_fresh_repo_with_hook_scores(fx: HookFixture) -> None:
         rc = _verify_edit_cmd(repo2, "verify", "f1", root=root2)
 
         assert not os.path.exists(
-            os.path.join(project_dir(root2, repo2), "authorship.jsonl")
+            os.path.join(get_project_dir(root2, repo2), "authorship.jsonl")
         ), "precondition: this repo should have no authorship log"
         expected = 0 if watching else 3
         assert rc == expected, "fresh repo with watching=%s should give %d, got %d" % (
