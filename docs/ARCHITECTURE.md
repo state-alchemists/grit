@@ -14,7 +14,7 @@ A hook watches who writes code, git says what changed, and a local daemon turns 
 
 | Process | Lives for | Writes | Never does |
 |---|---|---|---|
-| **the hook** (`hooks/grit-hook.py`) | milliseconds, once per tool call | `<project>/.grit/authorship.jsonl` | talk to the daemon, block an edit |
+| **the hook** (`hooks/grit-hook.py`) | milliseconds, once per tool call | `~/.grit/projects/<key>/authorship.jsonl` | talk to the daemon, block an edit |
 | **the assistant** (`skills/grit/SKILL.md`) | your session | evidence, via `score.py` | decide the check passed |
 | **the daemon** (`skills/grit/serve.py`) | until stopped | `~/.grit/*` | run your acceptance check |
 
@@ -25,19 +25,20 @@ They are deliberately not coupled. The hook cannot depend on the daemon running,
 Everything is JSON or JSONL on disk. There is no database and no server you do not control.
 
 ```
-<project>/.grit/                     per project — raw observation
-  authorship.jsonl    append-only    every byte the assistant wrote, here
-  snapshots/<task>.json              the git baseline for one handover
-  off                 marker         killswitch for this project
-
-~/.grit/                             per person — the record
+~/.grit/                             everything lives here — nothing in the project
   evidence.jsonl      append-only    THE SOURCE OF TRUTH for your score
   ledger.json         replace        tutorial sessions and their three gates
   sessions.json       replace, 0600  live tokens; survives a daemon restart
   preferences.json    replace        theme, callsign — configuration only
-  projects.json       replace        which projects have an authorship log
+  projects.json       replace        which project paths have an authorship log
   daemon.json         replace        where the daemon is listening right now
   tutorials/          files          hand-authored tutorial pages
+
+  projects/<key>/                    per project — raw observation, keyed by a
+                                      hash of the project's real path
+    authorship.jsonl  append-only    every byte the assistant wrote, here
+    snapshots/<task>.json            the git baseline for one handover
+    off               marker         killswitch for this project
 
   asked/              markers        one file per session already prompted
   .last-event         replace        2-second de-dup window for the hook
@@ -45,11 +46,11 @@ Everything is JSON or JSONL on disk. There is no database and no server you do n
   daemon.log          append-only    stdout/stderr when started with --daemon
 ```
 
-The four below the gap are scratch, not record: delete any of them and nothing about your score changes.
+Everything below `tutorials/` is scratch, not record: delete any of it and nothing about your score changes — including `projects/`, whose loss only means authorship history for those repos is gone, not your evidence or score.
 
 **`evidence.jsonl` is the only file that matters.** The score is recomputed from it on every read and stored nowhere, so there is no cached number to go stale and nothing to edit into being true. Delete it and your score is genuinely gone; edit it and you have only lied to yourself.
 
-The split is deliberate: **observations are per project, proficiency is per person.** Learning token buckets in one repository does not un-learn them in the next.
+The split is deliberate: **observations are keyed by project, proficiency is per person** — and both now live under `~/.grit/`, not inside the repository. Learning token buckets in one repository does not un-learn them in the next.
 
 ## The path a score takes
 

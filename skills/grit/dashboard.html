@@ -298,7 +298,7 @@ const THEMES = [
 ];
 const RANK = {strong:"Proven", recall:"Recall", weak:"Unproven"};
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
+const escapeHtml = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 let prefs = null;
@@ -331,8 +331,8 @@ function buildSwatches(selected) {
     const cols = ["--bg2", "--accent", "--accent2", "--fg"]
       .map(v => cs.getPropertyValue(v).trim() || "#888");
     return `<button class="swatch" data-theme="${id}" aria-pressed="${id === selected}">
-      <em>${cols.map(c => `<s style="background:${esc(c)}"></s>`).join("")}</em>
-      <b>${esc(label)}</b><span>${esc(blurb)}</span></button>`;
+      <em>${cols.map(c => `<s style="background:${escapeHtml(c)}"></s>`).join("")}</em>
+      <b>${escapeHtml(label)}</b><span>${escapeHtml(blurb)}</span></button>`;
   }).join("");
   probe.remove();
   $("#themes").querySelectorAll(".swatch").forEach(b => {
@@ -401,12 +401,12 @@ const LEVEL_RANK = {unproven: 0, recall: 1, proven: 2};
 let PREV_LEVELS = {};
 let FIRST_RENDER = true;
 
-function conceptCard(name, c, justLeveled) {
+function buildConceptCard(name, c, justLeveled) {
   const cls = CLS[c.level] || "weak";
   const pct = Math.round((c.score || 0) * 100);
   return `<div class="node lv-${cls}${justLeveled ? " just-leveled" : ""}">
-    <h3>${esc(name)}</h3>
-    <span class="badge ${cls}">${esc(c.level)}</span>
+    <h3>${escapeHtml(name)}</h3>
+    <span class="badge ${cls}">${escapeHtml(c.level)}</span>
     ${c.unaided_repo ? "" :
       '<span class="badge stale" style="margin-left:6px">no unaided repo work</span>'}
     <div class="meter"><i style="width:${pct}%"></i></div>
@@ -418,7 +418,7 @@ function conceptCard(name, c, justLeveled) {
       <div><dt>repos</dt><dd>${c.projects || 0}</dd></div>
     </dl>
     ${c.blocked_by ? `<div class="muted" style="font-size:.72rem;margin-top:6px">
-       ⚑ ${esc(c.blocked_by)}</div>` : ""}
+       ⚑ ${escapeHtml(c.blocked_by)}</div>` : ""}
   </div>`;
 }
 
@@ -433,8 +433,8 @@ async function render() {
   // Say plainly when a panel's data never arrived. A zero the user cannot
   // distinguish from a real zero is worse than an error.
   $("#rootline").innerHTML = FAILED.size
-    ? `<span class="fail">daemon not answering: ${esc([...FAILED].join(", "))}</span>`
-    : `local daemon &middot; <code>${esc(ROOT)}</code>`;
+    ? `<span class="fail">daemon not answering: ${escapeHtml([...FAILED].join(", "))}</span>`
+    : `local daemon &middot; <code>${escapeHtml(ROOT)}</code>`;
 
   const who = (prefs.callsign || "").trim();
   $("#hail").textContent = who ? `${who}'s standing` : "Grit";
@@ -481,17 +481,17 @@ async function render() {
   $("#authorship").innerHTML = ap.length
     ? `<table><tr><th>project</th><th>lines</th><th>edits</th><th>shell</th>
        <th>files</th><th>offered</th><th>last</th></tr>` + ap.map(p => `<tr>
-         <td title="${esc(p.project)}">${esc(p.project.split("/").pop())}</td>
+         <td title="${escapeHtml(p.project)}">${escapeHtml(p.project.split("/").pop())}</td>
          <td class="fail">${p.lines}</td>
          <td>${p.edits}</td>
          <td class="muted">${p.shell}</td>
          <td class="muted">${p.files}</td>
          <td class="muted">${p.offers || 0}</td>
-         <td class="muted">${esc((p.last || "").slice(0, 16).replace("T", " "))}</td>
+         <td class="muted">${escapeHtml((p.last || "").slice(0, 16).replace("T", " "))}</td>
        </tr>` + (p.recent && p.recent.length
          ? `<tr><td colspan="7" class="muted" style="padding-left:14px;font-size:.78rem">
             most recent files the assistant touched &mdash; worth reading before you ship:
-            ${p.recent.map(f => `<code>${esc(f.split("/").pop())}</code>`).join(" · ")}
+            ${p.recent.map(f => `<code>${escapeHtml(f.split("/").pop())}</code>`).join(" · ")}
             </td></tr>` : "")).join("") + `</table>`
     : `<div class="empty"><b>Nothing recorded yet</b>
        Install the hook and work normally &mdash; every file the assistant writes
@@ -507,7 +507,7 @@ async function render() {
     }
   }
   $("#concepts").innerHTML = names.length
-    ? names.sort().map(n => conceptCard(n, concepts[n], justLeveled.has(n))).join("")
+    ? names.sort().map(n => buildConceptCard(n, concepts[n], justLeveled.has(n))).join("")
     : `<div class="empty" style="grid-column:1/-1"><b>Nothing measured yet</b>
        Ask the assistant to start a task you will do yourself. When your check passes and
        the assistant did not write the code, the concept lands here.</div>`;
@@ -515,9 +515,9 @@ async function render() {
   FIRST_RENDER = false;
 
   const rows = (tuts.tutorials || []).map(t => `<tr>
-      <td><a href="/tutorial/${encodeURIComponent(t.name)}">${esc(t.name)}</a></td>
-      <td class="${t.status === "earned" ? "pass" : "muted"}">${esc(t.status)}</td>
-      <td class="muted">${esc(t.detail)}</td></tr>`).join("");
+      <td><a href="/tutorial/${encodeURIComponent(t.name)}">${escapeHtml(t.name)}</a></td>
+      <td class="${t.status === "earned" ? "pass" : "muted"}">${escapeHtml(t.status)}</td>
+      <td class="muted">${escapeHtml(t.detail)}</td></tr>`).join("");
   // Onboarding (#firstrun) already says this once, on the very first load, and
   // is dismissible for good. A user who dismisses it and then never acts sees
   // nothing again — this one is data-driven instead: it shows on every visit
@@ -554,10 +554,10 @@ async function render() {
   }
 
   const led = (ledger.entries || []).slice(-12).reverse().map(e => `<tr>
-      <td>${esc(e.concept)}</td>
-      <td class="${e.earned ? "pass" : "muted"}">${e.earned ? "earned" : esc(e.judgment || "pending")}</td>
-      <td class="muted">${esc(e.routing_via || "unknown")}</td>
-      <td class="muted">${esc((e.opened || "").slice(0, 19).replace("T", " "))}</td></tr>`).join("");
+      <td>${escapeHtml(e.concept)}</td>
+      <td class="${e.earned ? "pass" : "muted"}">${e.earned ? "earned" : escapeHtml(e.judgment || "pending")}</td>
+      <td class="muted">${escapeHtml(e.routing_via || "unknown")}</td>
+      <td class="muted">${escapeHtml((e.opened || "").slice(0, 19).replace("T", " "))}</td></tr>`).join("");
   $("#ledger").innerHTML = led
     ? `<table><tr><th>concept</th><th>outcome</th><th>routed via</th><th>opened</th></tr>${led}</table>`
     : `<div class="empty muted">Nothing recorded yet.</div>`;
@@ -582,7 +582,7 @@ function watch() {
   const health = await getJSON("/health");
   applyTheme(prefs.theme, prefs.motion);
   ROOT = health.root || "";
-  $("#rootline").innerHTML = `local daemon &middot; <code>${esc(ROOT)}</code>`;
+  $("#rootline").innerHTML = `local daemon &middot; <code>${escapeHtml(ROOT)}</code>`;
   $("#app").hidden = false;
   await render();                    // data first: the page must be useful
   if (!prefs.onboarded) {            // ...then offer to personalise it

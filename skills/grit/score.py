@@ -104,7 +104,7 @@ class EvidenceRow:
         """The on-disk shape. `failed` is omitted when False so the file stays
         byte-comparable with what earlier versions wrote."""
         row: dict[str, Any] = {
-            "at": self.at or _now(),
+            "at": self.at or _get_timestamp(),
             "concept": self.concept,
             "source": self.source,
             "assistance": self.assistance,
@@ -115,6 +115,8 @@ class EvidenceRow:
         if self.failed:
             row["failed"] = True
         return row
+
+
 
 
 @dataclass
@@ -143,6 +145,8 @@ class ConceptScore:
             "projects": self.projects,
             "blocked_by": self.blocked_by,
         }
+
+
 
 
 @dataclass
@@ -204,84 +208,91 @@ PROVEN_AT = 0.80
 STALE_DAYS = 90
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def main() -> int:
+    args = _build_parser().parse_args()
+    root = os.path.expanduser(args.root)
 
-
-def _age_days(stamp: str, now: Optional[datetime] = None) -> int:
-    try:
-        then = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-    except (ValueError, TypeError):
+    if args.command == "selftest":
+        _demo()
         return 0
-    if then.tzinfo is None:
-        then = then.replace(tzinfo=timezone.utc)
-    return ((now or datetime.now(timezone.utc)) - then).days
+    if args.command == "concepts":
+        return _print_concepts(root)
+    if args.command == "show":
+        return _print_profile(root)
+    return _record_and_report(args, root)
 
 
-def evidence_path(root: str) -> str:
-    return os.path.join(root, "evidence.jsonl")
-
-
-def load(root: str) -> list[EvidenceRow]:
-    path = evidence_path(root)
-    if not os.path.exists(path):
-        return []
-    out: list[EvidenceRow] = []
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            try:
-                out.append(EvidenceRow.from_dict(json.loads(line)))
-            except ValueError:
-                continue  # one bad line must not void a record
-    return out
-
-
-def task_key(source: str, project: str, task: str) -> TaskKey:
-    """The identity of a piece of work, for novelty and for the distinct-task count.
-
-    Repository tasks are scoped by project: task ids are per-project sequences,
-    so `001` in two different repos is two different tasks. Without the project
-    they collided, and two genuine unaided tasks scored as one repeated one —
-    0.75/recall instead of 1.00/proven, silently penalising anyone who works
-    across more than one codebase.
-
-    Tutorials are deliberately NOT scoped. They live in one place per person, so
-    the same exercise is the same exercise wherever you happen to run it, and
-    repeating it must decay no matter which repo you are sitting in.
-    """
-    if source == "repo":
-        return (source, project or "", task or "")
-    return (source, "", task or "")
-
-
-def known_concepts(root: str) -> list[str]:
-    return sorted({e.concept for e in load(root) if e.concept})
-
-
-def near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[str]:
-    """Existing concept names close enough to `concept` to be the same idea.
-
-    Fragmentation is the silent failure of this model: `token-bucket`,
-    `token_bucket` and `token-buckets` split one concept's evidence three ways,
-    so the work is done three times and nothing ever reaches `proven`. Nobody
-    notices, because each name looks reasonable on its own.
-
-    A warning, never a block — the user owns their concept names, and two
-    similar names are sometimes genuinely two things.
-    """
-    existing = known_concepts(root)
-    if concept in existing:
-        return []
-    norm: Callable[[str], str] = (
-        lambda x: x.lower().replace("_", "-").replace(" ", "-").rstrip("s")
+def _build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description="grit scoring")
+    ap.add_argument("command", choices=["record", "show", "concepts", "selftest"])
+    ap.add_argument("concept", nargs="?")
+    ap.add_argument("--source", choices=sorted(SOURCE_WEIGHT))
+    ap.add_argument("--assistance", choices=sorted(ASSISTANCE))
+    ap.add_argument("--task", default="")
+    ap.add_argument("--detail", default="")
+    ap.add_argument(
+        "--project",
+        default=os.getcwd(),
+        help="repo this task belongs to; ignored for --source sandbox",
     )
-    hits = [c for c in existing if norm(c) == norm(concept)]
-    hits += [
-        c
-        for c in difflib.get_close_matches(concept, existing, n=3, cutoff=cutoff)
-        if c not in hits
-    ]
-    return hits
+    ap.add_argument("--failed", action="store_true")
+    ap.add_argument(
+        "--root", default=os.path.expanduser(os.environ.get("GRIT_ROOT", "~/.grit"))
+    )
+    return ap
+
+
+def _print_concepts(root: str) -> int:
+    names = get_known_concepts(root)
+    print(
+        "\n".join(names)
+        if names
+        else "(no concepts yet — the first recorded task creates one)"
+    )
+    return 0
+
+
+def _print_profile(root: str) -> int:
+    print(json.dumps(profile(root).to_dict(), indent=2))
+    return 0
+
+
+def _record_and_report(args: argparse.Namespace, root: str) -> int:
+    """Record one task, warn about a fragmenting name, and print the new score."""
+    if not (args.concept and args.source and args.assistance):
+        print("record needs <concept> --source --assistance", file=sys.stderr)
+        return 2
+    _warn_if_name_splits_evidence(root, args.concept)
+    record(
+        root,
+        args.concept,
+        args.source,
+        args.assistance,
+        args.task,
+        args.detail,
+        args.project,
+        failed=args.failed,
+    )
+    rows = [e for e in load(root) if e.concept == args.concept]
+    print(json.dumps(score_concept(rows).to_dict(), indent=2))
+    return 0
+
+
+def _warn_if_name_splits_evidence(root: str, concept: str) -> None:
+    """A warning, never a block — the user owns their concept names. But a
+    split concept can never reach `proven`, and nobody notices a near-duplicate
+    name because each one looks reasonable on its own."""
+    dupes = get_near_duplicates(root, concept)
+    if not dupes:
+        return
+    print(
+        "grit: '%s' looks like an existing concept: %s\n"
+        "      Using a new name SPLITS the evidence, and a split concept "
+        "can never reach `proven`.\n"
+        "      Reuse one of those names unless this is genuinely a "
+        "different idea." % (concept, ", ".join(dupes)),
+        file=sys.stderr,
+    )
 
 
 def record(
@@ -299,7 +310,7 @@ def record(
     if assistance not in ASSISTANCE:
         raise ValueError("assistance must be one of %s" % list(ASSISTANCE))
     row = EvidenceRow(
-        at=_now(),
+        at=_get_timestamp(),
         concept=concept,
         source=cast(Source, source),  # validated above
         assistance=cast(Assistance, assistance),  # validated above
@@ -311,9 +322,79 @@ def record(
         failed=failed,
     )
     os.makedirs(root, exist_ok=True)
-    with open(evidence_path(root), "a", encoding="utf-8") as fh:
+    with open(get_evidence_path(root), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row.to_dict()) + "\n")
     return row
+
+
+
+
+def profile(root: str, now: Optional[datetime] = None) -> Profile:
+    by_concept: dict[str, list[EvidenceRow]] = {}
+    for ev in load(root):
+        by_concept.setdefault(ev.concept, []).append(ev)
+    return Profile(
+        concepts={c: score_concept(evs, now) for c, evs in by_concept.items()},
+        note=(
+            "Derived from evidence.jsonl. `proven` requires unaided work "
+            "in a real repository — sandbox exercises alone cannot reach "
+            "it, and repeating one exercise is worth progressively less."
+        ),
+    )
+
+
+def load(root: str) -> list[EvidenceRow]:
+    path = get_evidence_path(root)
+    if not os.path.exists(path):
+        return []
+    out: list[EvidenceRow] = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                out.append(EvidenceRow.from_dict(json.loads(line)))
+            except ValueError:
+                continue  # one bad line must not void a record
+    return out
+
+
+def get_known_concepts(root: str) -> list[str]:
+    return sorted({e.concept for e in load(root) if e.concept})
+
+
+def get_near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[str]:
+    """Existing concept names close enough to `concept` to be the same idea.
+
+    Fragmentation is the silent failure of this model: `token-bucket`,
+    `token_bucket` and `token-buckets` split one concept's evidence three ways,
+    so the work is done three times and nothing ever reaches `proven`. Nobody
+    notices, because each name looks reasonable on its own.
+
+    A warning, never a block — the user owns their concept names, and two
+    similar names are sometimes genuinely two things.
+    """
+    existing = get_known_concepts(root)
+    if concept in existing:
+        return []
+    norm: Callable[[str], str] = (
+        lambda x: x.lower().replace("_", "-").replace(" ", "-").rstrip("s")
+    )
+    hits = [c for c in existing if norm(c) == norm(concept)]
+    hits += [
+        c
+        for c in difflib.get_close_matches(concept, existing, n=3, cutoff=cutoff)
+        if c not in hits
+    ]
+    return hits
+
+
+def score_concept(
+    events: Sequence[EvidenceRow], now: Optional[datetime] = None
+) -> ConceptScore:
+    """Score one concept's events. Pure: no clock, no disk, no globals."""
+    t = _Tally()
+    for ev in sorted(events, key=lambda e: e.at):
+        _fold_event(t, ev, now)
+    return _tally_to_score(t)
 
 
 @dataclass
@@ -330,16 +411,6 @@ class _Tally:
     projects: set[str] = field(default_factory=set)
 
 
-def score_concept(
-    events: Sequence[EvidenceRow], now: Optional[datetime] = None
-) -> ConceptScore:
-    """Score one concept's events. Pure: no clock, no disk, no globals."""
-    t = _Tally()
-    for ev in sorted(events, key=lambda e: e.at):
-        _fold_event(t, ev, now)
-    return _tally_to_score(t)
-
-
 def _fold_event(t: _Tally, ev: EvidenceRow, now: Optional[datetime]) -> None:
     """Add one event's contribution to the tally."""
     if ev.failed:
@@ -351,10 +422,28 @@ def _fold_event(t: _Tally, ev: EvidenceRow, now: Optional[datetime]) -> None:
     t.passes += 1
     if ev.project:
         t.projects.add(ev.project)
-    key = task_key(ev.source, ev.project, ev.task)
+    key = compose_task_key(ev.source, ev.project, ev.task)
     t.total += _credit_for(t, ev, key, now)
     if ev.source == "repo" and ev.assistance == "none":
         t.unaided_tasks.add(key)
+
+
+def compose_task_key(source: str, project: str, task: str) -> TaskKey:
+    """The identity of a piece of work, for novelty and for the distinct-task count.
+
+    Repository tasks are scoped by project: task ids are per-project sequences,
+    so `001` in two different repos is two different tasks. Without the project
+    they collided, and two genuine unaided tasks scored as one repeated one —
+    0.75/recall instead of 1.00/proven, silently penalising anyone who works
+    across more than one codebase.
+
+    Tutorials are deliberately NOT scoped. They live in one place per person, so
+    the same exercise is the same exercise wherever you happen to run it, and
+    repeating it must decay no matter which repo you are sitting in.
+    """
+    if source == "repo":
+        return (source, project or "", task or "")
+    return (source, "", task or "")
 
 
 def _credit_for(
@@ -380,6 +469,16 @@ def _apply_task_cap(t: _Tally, key: TaskKey, credit: float, weight: float) -> fl
     return credit
 
 
+def _age_days(stamp: str, now: Optional[datetime] = None) -> int:
+    try:
+        then = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return 0
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return ((now or datetime.now(timezone.utc)) - then).days
+
+
 def _tally_to_score(t: _Tally) -> ConceptScore:
     total = max(0.0, min(1.0, t.total))
     enough_unaided = len(t.unaided_tasks) >= PROVEN_NEEDS_UNAIDED_TASKS
@@ -392,7 +491,7 @@ def _tally_to_score(t: _Tally) -> ConceptScore:
         unaided_repo=bool(t.unaided_tasks),
         unaided_tasks=len(t.unaided_tasks),
         projects=len(t.projects),
-        blocked_by=_blocked_reason(level, total, enough_unaided, len(t.unaided_tasks)),
+        blocked_by=_get_blocked_reason(level, total, enough_unaided, len(t.unaided_tasks)),
     )
 
 
@@ -404,7 +503,7 @@ def _level_for(total: float, enough_unaided: bool) -> Level:
     return "unproven"
 
 
-def _blocked_reason(
+def _get_blocked_reason(
     level: Level, total: float, enough_unaided: bool, unaided_count: int
 ) -> Optional[str]:
     """Why this concept is not `proven`, in the user's terms — or None when it
@@ -421,18 +520,12 @@ def _blocked_reason(
     return None
 
 
-def profile(root: str, now: Optional[datetime] = None) -> Profile:
-    by_concept: dict[str, list[EvidenceRow]] = {}
-    for ev in load(root):
-        by_concept.setdefault(ev.concept, []).append(ev)
-    return Profile(
-        concepts={c: score_concept(evs, now) for c, evs in by_concept.items()},
-        note=(
-            "Derived from evidence.jsonl. `proven` requires unaided work "
-            "in a real repository — sandbox exercises alone cannot reach "
-            "it, and repeating one exercise is worth progressively less."
-        ),
-    )
+def get_evidence_path(root: str) -> str:
+    return os.path.join(root, "evidence.jsonl")
+
+
+def _get_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _demo() -> None:
@@ -580,13 +673,13 @@ def _check_near_duplicate_detection() -> None:
     try:
         record(tmp, "token-bucket", "repo", "none", "t1", project="/p")
         for variant in ("token_bucket", "token-buckets", "Token-Bucket"):
-            assert near_duplicates(tmp, variant), (
+            assert get_near_duplicates(tmp, variant), (
                 "%s must be flagged against token-bucket" % variant
             )
-        assert not near_duplicates(
+        assert not get_near_duplicates(
             tmp, "middleware-ordering"
         ), "an unrelated concept must not be flagged"
-        assert not near_duplicates(
+        assert not get_near_duplicates(
             tmp, "token-bucket"
         ), "an exact match is not a duplicate, it is the same concept"
     finally:
@@ -612,93 +705,6 @@ def _check_failed_flag_reaches_the_file() -> None:
         )
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description="grit scoring")
-    ap.add_argument("command", choices=["record", "show", "concepts", "selftest"])
-    ap.add_argument("concept", nargs="?")
-    ap.add_argument("--source", choices=sorted(SOURCE_WEIGHT))
-    ap.add_argument("--assistance", choices=sorted(ASSISTANCE))
-    ap.add_argument("--task", default="")
-    ap.add_argument("--detail", default="")
-    ap.add_argument(
-        "--project",
-        default=os.getcwd(),
-        help="repo this task belongs to; ignored for --source sandbox",
-    )
-    ap.add_argument("--failed", action="store_true")
-    ap.add_argument(
-        "--root", default=os.path.expanduser(os.environ.get("GRIT_ROOT", "~/.grit"))
-    )
-    return ap
-
-
-def _print_concepts(root: str) -> int:
-    names = known_concepts(root)
-    print(
-        "\n".join(names)
-        if names
-        else "(no concepts yet — the first recorded task creates one)"
-    )
-    return 0
-
-
-def _print_profile(root: str) -> int:
-    print(json.dumps(profile(root).to_dict(), indent=2))
-    return 0
-
-
-def _record_and_report(args: argparse.Namespace, root: str) -> int:
-    """Record one task, warn about a fragmenting name, and print the new score."""
-    if not (args.concept and args.source and args.assistance):
-        print("record needs <concept> --source --assistance", file=sys.stderr)
-        return 2
-    _warn_if_name_splits_evidence(root, args.concept)
-    record(
-        root,
-        args.concept,
-        args.source,
-        args.assistance,
-        args.task,
-        args.detail,
-        args.project,
-        failed=args.failed,
-    )
-    rows = [e for e in load(root) if e.concept == args.concept]
-    print(json.dumps(score_concept(rows).to_dict(), indent=2))
-    return 0
-
-
-def _warn_if_name_splits_evidence(root: str, concept: str) -> None:
-    """A warning, never a block — the user owns their concept names. But a
-    split concept can never reach `proven`, and nobody notices a near-duplicate
-    name because each one looks reasonable on its own."""
-    dupes = near_duplicates(root, concept)
-    if not dupes:
-        return
-    print(
-        "grit: '%s' looks like an existing concept: %s\n"
-        "      Using a new name SPLITS the evidence, and a split concept "
-        "can never reach `proven`.\n"
-        "      Reuse one of those names unless this is genuinely a "
-        "different idea." % (concept, ", ".join(dupes)),
-        file=sys.stderr,
-    )
-
-
-def main() -> int:
-    args = _build_parser().parse_args()
-    root = os.path.expanduser(args.root)
-
-    if args.command == "selftest":
-        _demo()
-        return 0
-    if args.command == "concepts":
-        return _print_concepts(root)
-    if args.command == "show":
-        return _print_profile(root)
-    return _record_and_report(args, root)
 
 
 if __name__ == "__main__":

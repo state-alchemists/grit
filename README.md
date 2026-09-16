@@ -30,25 +30,18 @@ Cited deliberately as a counterweight: [Cui et al., Management Science 2025](htt
 
 **Agree the concepts → choose how → you write it → check → verify who wrote it → score.**
 
-```
- ① AGREE      You: add rate limiting to the login route
-              AI:  This exercises token-bucket and atomic-counters. Right?
-                   ↓ your edit wins — they are your concept names
- ─────────────────────────────────────────────────────────────────────
- ② CHOOSE     1. I'll do it          full credit
-              2. Walk me through it  half credit
-              3. You do it           no credit
- ─────────────────────────────────────────────────────────────────────
- ③ DIY        You write the code. The AI answers questions, explains,
-              points at files — and writes nothing.
- ─────────────────────────────────────────────────────────────────────
- ④ CHECK      npm test -- rate-limiter      must actually pass
- ─────────────────────────────────────────────────────────────────────
- ⑤ VERIFY     verify_edit.py says who wrote it, from git + the hook log
-              HUMAN-WRITTEN / ASSISTED / UNVERIFIED / NOTHING CHANGED
- ─────────────────────────────────────────────────────────────────────
- ⑥ SCORE      one evidence event per concept
-              credit = source × assistance × novelty
+```mermaid
+flowchart TD
+    A["① AGREE<br/>You: add rate limiting to the login route<br/>AI: this exercises token-bucket and atomic-counters, right?<br/><i>your edit wins — they are your concept names</i>"] --> B{"② CHOOSE"}
+    B -->|"I'll do it"| F["full credit"]
+    B -->|"Walk me through it"| H["half credit"]
+    B -->|"You do it"| N["no credit"]
+    F --> C
+    H --> C
+    N --> C
+    C["③ DIY<br/>You write the code — the AI answers questions, explains,<br/>points at files, and writes nothing"] --> D["④ CHECK<br/>npm test -- rate-limiter — must actually pass"]
+    D --> E["⑤ VERIFY<br/>verify_edit.py says who wrote it, from git + the hook log<br/>HUMAN-WRITTEN / ASSISTED / UNVERIFIED / NOTHING CHANGED"]
+    E --> G["⑥ SCORE<br/>one evidence event per concept<br/>credit = source × assistance × novelty"]
 ```
 
 **You do not have to be trusted for any of this.** The hook observes every byte the assistant writes, so the `assistance` coefficient is measured rather than declared. If the AI wrote it, the concept earns zero whatever anyone intended.
@@ -160,10 +153,10 @@ bin/install.sh --doctor        # every registration, and whether its script actu
 
 It fires on every tool call that can write a file — `Write`, `Edit`, `NotebookEdit`, `Bash`, `PowerShell` — and does two things:
 
-1. **Records who wrote the code**, to `<project>/.grit/authorship.jsonl`. Edits (`Write`, `Edit`, `NotebookEdit`) are recorded exactly, with line counts. Shell calls (`Bash`, `PowerShell`) are recorded as **opaque** — an assistant can write files with `python3 - <<EOF` or `sed -i`, and nothing observes what those touched. Recording the call without a line count is weaker than seeing the edit, but "something unattributable happened" is true and silence is not: without this, shell-written code reads as human-written.
+1. **Records who wrote the code**, to `~/.grit/projects/<project-key>/authorship.jsonl` — keyed by the project's path, not stored inside it. Edits (`Write`, `Edit`, `NotebookEdit`) are recorded exactly, with line counts. Shell calls (`Bash`, `PowerShell`) are recorded as **opaque** — an assistant can write files with `python3 - <<EOF` or `sed -i`, and nothing observes what those touched. Recording the call without a line count is weaker than seeing the edit, but "something unattributable happened" is true and silence is not: without this, shell-written code reads as human-written.
 2. **Asks once per session**, the first time the assistant reaches for the editor. Once. A prompt on every edit is how a tool gets uninstalled.
 
-Turn it off three ways: `touch .grit/off` in a project, `GRIT_OFF=1` everywhere, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` (which keeps the recording and drops the prompt).
+Turn it off three ways: `grit-hook.py --off` from inside a project, `GRIT_OFF=1` everywhere, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` (which keeps the recording and drops the prompt). A `touch .grit/off` written before the upgrade still counts — installing a new version never silently re-enables a recording you stopped.
 
 ## Try it
 
@@ -176,7 +169,7 @@ Open the URL it prints. You will get the onboarding gate and a dashboard with **
 
 ```bash
 python3 skills/grit/test_serve.py    # 13 integrity properties
-python3 hooks/test_hook.py           # 16 hook properties
+python3 hooks/test_hook.py           # 19 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 bin/check_docs.py            # every factual claim in these docs
 ```

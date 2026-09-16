@@ -1,7 +1,7 @@
 # ADR 0006 — Two credentials per session: the page reports, the assistant judges
 
 - **Status**: Accepted
-- **Date**: 2026-09-13
+- **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: completion, daemon, integrity, security, gates
 
@@ -25,6 +25,8 @@ Three further defects shared the same root — one secret doing several jobs, an
 - Ledger rows carried the **raw session token** in their `session` field, and `/ledger` echoed any `http://localhost:*` origin. Every `npm run dev` on the machine could read the whole ledger — every concept failed, every justification verbatim — and then mint judgments from the tokens it found there. That is exactly the liability DESIGN §8 exists to prevent; loopback is not a boundary on a developer's machine, it is the least isolated address on it.
 - Sessions were RAM-only. Gate 3 arrives whenever the assistant gets to it, so a restart in that window stranded the concept permanently unearned, fixable only by hand-editing the ledger — which ADR 0009 forbids.
 
+The split still left one door open, which real use soon closed. Keeping the page away from gate 3 stopped there, and the verdict itself stayed mutable: `judge()` overwrote `session["judgment"]` on every call with no history. A judgment cast with the placeholder message `"test"` was then re-cast with the real reasoning, and the ledger kept no trace of the first. A record whose whole claim is that it cannot be talked out of was quietly rewriting itself — the same class of defect as the page awarding its own judgment, one layer further in.
+
 ## Decision
 
 **Two credentials per session, on separate routes.**
@@ -36,11 +38,12 @@ Three further defects shared the same root — one secret doing several jobs, an
 
 `POST /tutorial/<report>/judgment` returns **403**, not 404 — the page attempting to judge itself is the attack this split exists to stop, and it should be legible in the log rather than look like a typo.
 
-Three supporting rules:
+Four supporting rules:
 
 1. **`earned` is derived, never assigned.** One function, `_earned(session)`: all three gates present, the check actually passed, the judgment sound. It is now impossible for two code paths to disagree about what earned means, because there is one.
 2. **No raw credential enters the ledger.** Rows carry a short opaque `sid`. CORS is closed outright — every page that talks to the daemon is a page the daemon served, so same-origin suffices and no cross-origin reader is contemplated.
 3. **Sessions persist** to `sessions.json` at mode `0600`, so a pending judgment survives a restart.
+4. **The first verdict stands.** Nothing re-judges a session, not even a second cast from the same judge token. A later call appends to the `judgments` history, returns `409` with the standing verdict and the full list, and changes neither the gates nor `earned`. The remedy for a wrong verdict is a fresh attempt at the tutorial, which opens a new session and writes new evidence. Editing the past is the one operation this ledger exists to prevent, and "the assistant made a mistake" is not an exemption — it is the exact case an audit trail is for.
 
 ## Consequences
 
@@ -49,16 +52,7 @@ Three supporting rules:
 - Anything that talked to the daemon cross-origin stops working. The tutorial template now uses a same-origin relative URL when the daemon served it, and the absolute fallback only applies to a hand-opened `file://` page.
 - `sessions.json` holds live credentials in plaintext under `~/.grit/`. It is mode-`0600` and never transmitted, which is the same boundary the ledger already relies on — one more file inside it, not a new exposure.
 - **The lesson generalises past this bug.** A guarantee written in a docstring is a claim; this repository's whole thesis is that claims are not measurements. `skills/grit/test_serve.py` now pins all six properties, and every case in it is a defect that actually shipped while the README described the daemon as "working and tested."
-
-## Addendum — 2026-09-14: gate 3 appends, it does not replace
-
-The split above kept the page away from gate 3 and stopped there. It left the verdict itself mutable, and `judge()` overwrote `session["judgment"]` on every call with no history.
-
-That surfaced in real use. A judgment was cast carrying the placeholder message `"test"`, then re-cast with the real reasoning; the ledger kept no trace of the first. A record whose whole claim is that it cannot be talked out of was quietly rewriting itself — the same class of defect as the page awarding its own judgment, one layer further in.
-
-**The first verdict stands.** Later calls append to a `judgments` history, return `409` with the standing verdict and the full list, and change nothing — not the gate, not `earned`, not the evidence. The remedy for a wrong verdict is a fresh attempt at the tutorial, which opens a new session and writes new evidence. Editing the past is the one operation this ledger exists to prevent, and "the assistant made a mistake" is not an exemption — it is the exact case an audit trail is for.
-
-Pinned by `test_serve.py` property 3c, which replays the real sequence: cast `unsound/"test"`, then attempt `sound/"real reasoning"`, and assert the standing verdict is still `unsound/"test"`, that both verdicts are retained, and that `earned` did not flip.
+- **The first verdict is pinned to the incident that made it.** `test_serve.py`'s gate-3-appends property replays the real sequence — cast `unsound/"test"`, then attempt `sound/"real reasoning"` — and asserts the standing verdict is still `unsound/"test"`, that both verdicts are retained, and that `earned` did not flip.
 
 ## Rejected
 

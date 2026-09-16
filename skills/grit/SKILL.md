@@ -19,7 +19,7 @@ So: offer the self-completion path first, teach only where a gap has been *measu
 An explicit invocation is **not** a request to start the loop — there is usually no work in context, and offering "do you want to do this yourself?" about nothing is nonsense. Treat it as *"tell me where I stand."* Report, in this order:
 
 1. **Is it wired up?** Run `python3 <skill-dir>/doctor.py`. It lists every hook registration and whether it can actually run. It ships with this skill — you do not need the repo. If nothing is registered, say so — without a hook nothing is being recorded at all.
-2. **What has the assistant written here?** Read `<project>/.grit/authorship.jsonl`. Report lines and files written by the assistant, and shell calls whose effect was not observed. **Never report a percentage** — your own edits are not observed, so there is no denominator.
+2. **What has the assistant written here?** The log lives under `~/.grit/projects/<hash-of-this-path>/authorship.jsonl`, not in this repo — query it via the daemon instead: `curl <url>/authorship` (get `url` from `~/.grit/daemon.json`), then find this project's absolute path in the `projects` list. Report lines and files written by the assistant, and shell calls whose effect was not observed. **Never report a percentage** — your own edits are not observed, so there is no denominator.
 3. **The dashboard.** Read `url` from `~/.grit/daemon.json`; start `serve.py` if nothing is listening; give them the link.
 4. **What is thin.** Tutorials are written on demand, one at a time, by you — there is no library and nothing pre-made. Say so plainly: most scores come from real repository tasks. An empty profile means no task has been done yet, not a malfunction.
 

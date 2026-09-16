@@ -4,9 +4,9 @@
 Two jobs, in order of how much they matter:
 
   1. RECORD who wrote the code. Every time the assistant writes bytes, that is
-     logged to <project>/.grit/authorship.jsonl. This is the only number in the
-     whole product that cannot be talked out of: it is not a self-report, it is
-     a count of tool calls that actually happened.
+     logged to ~/.grit/projects/<key>/authorship.jsonl. This is the only number
+     in the whole product that cannot be talked out of: it is not a self-report,
+     it is a count of tool calls that actually happened.
 
   2. ASK, ONCE. The first time the assistant reaches for the editor in a
      session, surface the choice. Once. After that this hook is silent for the
@@ -20,9 +20,11 @@ Design constraints this file must never violate:
 
 OFF SWITCHES
   GRIT_OFF=1               environment, kills it everywhere
-  touch .grit/off          per project
+  grit-hook.py --off       per project (run from the project directory)
   "ask_on_first_edit":false in ~/.grit/preferences.json — keeps the recording,
                            drops the prompt
+  touch .grit/off          legacy per-project marker, still honored so an
+                           upgrade never silently re-enables the recording
 """
 
 from __future__ import annotations
@@ -60,23 +62,73 @@ DEDUPE_WINDOW = 0.25
 ASK_MARKERS_KEPT = 200
 
 
-def _lines(tool_input: dict[str, Any]) -> int:
-    """How many lines the assistant is about to write."""
-    text = tool_input.get("content")  # Write
-    if text is None:
-        text = tool_input.get("new_string", "")  # Edit
-    return len(str(text).splitlines())
+def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
+        _set_project_off(sys.argv[1] == "--off", sys.argv[2] if len(sys.argv) > 2 else ".")
+        return
+    raw = sys.stdin.read()
+    event: dict[str, Any] = json.loads(raw or "{}")
+
+    tool = event.get("tool_name", "")
+    if tool not in WRITE_TOOLS and tool not in SHELL_TOOLS:
+        return
+
+    cwd = event.get("cwd") or os.getcwd()
+    if _is_switched_off(cwd):
+        return
+
+    # One event, one record — even when two registrations both match it.
+    if _is_duplicate(event):
+        return
+
+    tool_input = event.get("tool_input") or {}
+
+    # ── 1. Record. Always, silently. ─────────────────────────────────────────
+    _record_authorship(cwd, tool, event, tool_input)
+
+    # ── 2. Ask, once per session — on real edits only. ───────────────────────
+    # Bash is recorded but never prompts: most shell calls are reads and builds,
+    # and a prompt on each one is how this gets uninstalled.
+    if tool not in WRITE_TOOLS:
+        return
+    if not _should_ask(event):
+        return
+    _record_offer(cwd, event, tool_input)
+    print(_compose_ask_prompt(tool_input))
 
 
-def _prefs() -> dict[str, Any]:
-    try:
-        with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+def _set_project_off(off: bool, cwd: str) -> None:
+    """`--off`/`--on` CLI: flip the killswitch without needing to know its hashed
+    path. Toggles both the current marker and the legacy `<project>/.grit/off`,
+    so `--on` also revives a project that was silenced before the restructure."""
+    _flip_marker(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"), off)
+    _flip_marker(os.path.join(cwd, ".grit", "off"), off)
+    print("grit: %s for %s" % ("off" if off else "on", os.path.realpath(cwd)))
 
 
-def _duplicate(event: dict[str, Any]) -> bool:
+def _flip_marker(path: str, create: bool) -> None:
+    if create:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+    elif os.path.exists(path):
+        os.remove(path)
+
+
+def _is_switched_off(cwd: str) -> bool:
+    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project.
+
+    The current marker lives in `~/.grit/projects/<key>/`; a `touch .grit/off`
+    written before the restructure is still honored as well, so recording never
+    silently re-enables on an upgraded machine whose marker predates the move.
+    """
+    if os.environ.get("GRIT_OFF") == "1":
+        return True
+    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off")) or os.path.exists(
+        os.path.join(cwd, ".grit", "off")
+    )
+
+
+def _is_duplicate(event: dict[str, Any]) -> bool:
     """True if this exact edit already came through moments ago.
 
     One edit can reach this hook more than once, for reasons that are all
@@ -97,7 +149,7 @@ def _duplicate(event: dict[str, Any]) -> bool:
     as an editable record. Dedupe must never cost a real edit; when in doubt it
     records, and two rows is the safe direction.
     """
-    key = _event_key(event)
+    key = _get_event_key(event)
     path = os.path.join(HOME_ROOT, ".last-event")
     now = time.time()
     if _seen_recently(path, key, now):
@@ -106,7 +158,7 @@ def _duplicate(event: dict[str, Any]) -> bool:
     return False
 
 
-def _event_key(event: dict[str, Any]) -> str:
+def _get_event_key(event: dict[str, Any]) -> str:
     """A stable fingerprint of this edit.
 
     hashlib, not hash(): Python salts hash() per process, so two invocations of
@@ -148,6 +200,88 @@ def _remember_event(path: str, key: str, now: float) -> None:
         pass
 
 
+def _record_authorship(
+    cwd: str, tool: str, event: dict[str, Any], tool_input: dict[str, Any]
+) -> None:
+    """Append one authorship row. Recording must never cost the user an edit, so
+    every failure here is swallowed."""
+    try:
+        project_dir = _get_project_dir(HOME_ROOT, cwd)
+        os.makedirs(project_dir, exist_ok=True)
+        with open(
+            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
+        ) as fh:
+            fh.write(json.dumps(_compose_authorship_row(tool, event, tool_input)) + "\n")
+        _remember_project(cwd)
+    except Exception:
+        pass
+
+
+def _compose_authorship_row(
+    tool: str, event: dict[str, Any], tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "author": "assistant",
+        "tool": tool,
+        "session": event.get("session_id", ""),
+    }
+    if tool in WRITE_TOOLS:
+        row["file"] = tool_input.get("file_path", "")
+        row["lines"] = _count_lines(tool_input)
+    else:
+        # A shell command. We cannot know what it touched, so we say so rather
+        # than recording a zero that reads like "wrote nothing".
+        row["command"] = str(tool_input.get("command", ""))[:400]
+        row["opaque"] = True
+    return row
+
+
+def _count_lines(tool_input: dict[str, Any]) -> int:
+    """How many lines the assistant is about to write."""
+    text = tool_input.get("content")  # Write
+    if text is None:
+        text = tool_input.get("new_string", "")  # Edit
+    return len(str(text).splitlines())
+
+
+def _remember_project(cwd: str) -> None:
+    """Remember which projects have a log, so the dashboard can find them. The
+    log is per-project but the dashboard is per-person, and without this pointer
+    the only working feature stays invisible. Stored as the absolute real path:
+    the daemon re-derives the project key from this string from whatever
+    directory it was launched in, so a relative or symlinked spelling could
+    resolve to a different directory there than it did here."""
+    reg = os.path.join(HOME_ROOT, "projects.json")
+    key = os.path.realpath(cwd)
+    try:
+        with open(reg, encoding="utf-8") as fh:
+            known = json.load(fh)
+    except Exception:
+        known = []
+    if key in known:
+        return
+    known.append(key)
+    os.makedirs(HOME_ROOT, exist_ok=True)
+    with open(reg, "w", encoding="utf-8") as fh:
+        json.dump(known[-50:], fh, indent=2)
+
+
+def _should_ask(event: dict[str, Any]) -> bool:
+    """The once-per-session prompt, unless the user turned it off."""
+    if _get_preferences().get("ask_on_first_edit") is False:
+        return False
+    return not _already_asked(event.get("session_id") or "")
+
+
+def _get_preferences() -> dict[str, Any]:
+    try:
+        with open(os.path.join(HOME_ROOT, "preferences.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
 def _already_asked(session_id: str) -> bool:
     """One ask per session. The marker lives with the user's own state, not the
     project, so it survives switching between repos in one session."""
@@ -185,107 +319,6 @@ def _prune_markers(marker_dir: str) -> None:
         pass  # housekeeping must never cost the user an edit
 
 
-def main() -> None:
-    raw = sys.stdin.read()
-    event: dict[str, Any] = json.loads(raw or "{}")
-
-    tool = event.get("tool_name", "")
-    if tool not in WRITE_TOOLS and tool not in SHELL_TOOLS:
-        return
-
-    cwd = event.get("cwd") or os.getcwd()
-    if _switched_off(cwd):
-        return
-
-    # One event, one record — even when two registrations both match it.
-    if _duplicate(event):
-        return
-
-    tool_input = event.get("tool_input") or {}
-
-    # ── 1. Record. Always, silently. ─────────────────────────────────────────
-    _record_authorship(cwd, tool, event, tool_input)
-
-    # ── 2. Ask, once per session — on real edits only. ───────────────────────
-    # Bash is recorded but never prompts: most shell calls are reads and builds,
-    # and a prompt on each one is how this gets uninstalled.
-    if tool not in WRITE_TOOLS:
-        return
-    if not _should_ask(event):
-        return
-    _record_offer(cwd, event, tool_input)
-    print(_ask_prompt(tool_input))
-
-
-def _switched_off(cwd: str) -> bool:
-    """`GRIT_OFF=1` kills it everywhere; `.grit/off` kills it per project."""
-    if os.environ.get("GRIT_OFF") == "1":
-        return True
-    return os.path.exists(os.path.join(cwd, ".grit", "off"))
-
-
-def _record_authorship(
-    cwd: str, tool: str, event: dict[str, Any], tool_input: dict[str, Any]
-) -> None:
-    """Append one authorship row. Recording must never cost the user an edit, so
-    every failure here is swallowed."""
-    try:
-        grit_dir = os.path.join(cwd, ".grit")
-        os.makedirs(grit_dir, exist_ok=True)
-        with open(
-            os.path.join(grit_dir, "authorship.jsonl"), "a", encoding="utf-8"
-        ) as fh:
-            fh.write(json.dumps(_authorship_row(tool, event, tool_input)) + "\n")
-        _remember_project(cwd)
-    except Exception:
-        pass
-
-
-def _authorship_row(
-    tool: str, event: dict[str, Any], tool_input: dict[str, Any]
-) -> dict[str, Any]:
-    row: dict[str, Any] = {
-        "at": datetime.now(timezone.utc).isoformat(),
-        "author": "assistant",
-        "tool": tool,
-        "session": event.get("session_id", ""),
-    }
-    if tool in WRITE_TOOLS:
-        row["file"] = tool_input.get("file_path", "")
-        row["lines"] = _lines(tool_input)
-    else:
-        # A shell command. We cannot know what it touched, so we say so rather
-        # than recording a zero that reads like "wrote nothing".
-        row["command"] = str(tool_input.get("command", ""))[:400]
-        row["opaque"] = True
-    return row
-
-
-def _remember_project(cwd: str) -> None:
-    """Remember which projects have a log, so the dashboard can find them. The
-    log is per-project but the dashboard is per-person, and without this pointer
-    the only working feature stays invisible."""
-    reg = os.path.join(HOME_ROOT, "projects.json")
-    try:
-        with open(reg, encoding="utf-8") as fh:
-            known = json.load(fh)
-    except Exception:
-        known = []
-    if cwd in known:
-        return
-    known.append(cwd)
-    os.makedirs(HOME_ROOT, exist_ok=True)
-    with open(reg, "w", encoding="utf-8") as fh:
-        json.dump(known[-50:], fh, indent=2)
-
-
-def _should_ask(event: dict[str, Any]) -> bool:
-    """The once-per-session prompt, unless the user turned it off."""
-    if _prefs().get("ask_on_first_edit") is False:
-        return False
-    return not _already_asked(event.get("session_id") or "")
-
-
 def _record_offer(
     cwd: str, event: dict[str, Any], tool_input: dict[str, Any]
 ) -> None:
@@ -296,8 +329,10 @@ def _record_offer(
     in this session" is a sound inference, and it is the only evidence this
     product has that anyone ever chose to do the work."""
     try:
+        project_dir = _get_project_dir(HOME_ROOT, cwd)
+        os.makedirs(project_dir, exist_ok=True)
         with open(
-            os.path.join(cwd, ".grit", "authorship.jsonl"), "a", encoding="utf-8"
+            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
         ) as fh:
             fh.write(
                 json.dumps(
@@ -315,7 +350,7 @@ def _record_offer(
         pass
 
 
-def _ask_prompt(tool_input: dict[str, Any]) -> str:
+def _compose_ask_prompt(tool_input: dict[str, Any]) -> str:
     name = os.path.basename(tool_input.get("file_path", "") or "this file")
     return json.dumps(
         {
@@ -327,7 +362,8 @@ def _ask_prompt(tool_input: dict[str, Any]) -> str:
                     'Approve to let it. Or reject and say "I\'ll do it" — the '
                     "assistant will break the work into steps, stay out of the way, "
                     "and check your result.\n"
-                    "This asks once per session. Silence it with: touch .grit/off"
+                    "This asks once per session. Silence it with: "
+                    "grit-hook.py --off (run from this project)"
                     % name
                 ),
             }
@@ -353,6 +389,17 @@ def _log_failure(exc: BaseException) -> None:
             )
     except Exception:
         pass
+
+
+def _get_project_dir(root: str, cwd: str) -> str:
+    """Where this project's own state lives under `root` (normally HOME_ROOT).
+
+    Keyed by a hash of the real path rather than the path itself, so it is
+    always a safe, short directory name regardless of OS or path length. The
+    human-readable path lives separately, in ~/.grit/projects.json.
+    """
+    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
+    return os.path.join(root, "projects", key)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ Almost every defect in this repository's history was found by executing somethin
 
 ```sh
 python3 skills/grit/test_serve.py      # 13 integrity properties
-python3 hooks/test_hook.py             # 16 hook properties
+python3 hooks/test_hook.py             # 19 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
@@ -62,6 +62,8 @@ A comment earns its place by **changing what the next edit does**. Keep the non-
 New tests follow the same shape. A test here is a **property**, named for what breaks if it fails — not `test_record_3`.
 
 **Define the caller before the callee, where practical.** Read top to bottom, entry point first, in the order the code actually runs. This was briefly an AST checker under bin/, deleted for enforcing pure taste with a 168-line call-graph walker that drove a whole rewrite and wasn't wired into anything. Keep the convention, drop the tooling — this is a code-review preference, not a build gate, and "where practical" means mutual recursion and shared helpers are exempt.
+
+**Names follow the A/HC/LC cheatsheet** ([kettanaito/naming-cheatsheet](https://github.com/kettanaito/naming-cheatsheet)): `prefix? + action + high context + low context`. Every function name carries an action verb or a boolean prefix — `_get_project_dir`, `_is_duplicate`, `_compose_authorship_row`, `_report_unverified` — never a bare noun (`_state`, `_store`, `_duplicate` are all past mistakes that got renamed). Booleans read as predicates (`is`/`has`/`should`). No contractions in identifiers (`get_preferences`, not `_prefs`). Prefer `compose`/`get`/`set`/`report`/`resolve` for pure data-shaping, and keep JSON API keys (`hook_active`) untouched by function renames.
 
 ---
 
