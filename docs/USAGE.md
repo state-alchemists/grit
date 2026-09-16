@@ -189,7 +189,7 @@ your-repo/
         └── 003-implement-token-bucket.md        # generated on demand, cached
 ```
 
-Committing `.grit/` is the intended workflow — the plan and the record belong with the code they describe.
+Committing `.grit/` is the intended workflow — the plan and the record belong with the code they describe. *(Superseded 2026-09-16 by [ADR 0008's revision](adr/0008-dashboard-polls-files-it-does-not-push.md): the observation store moved out of the repository to `~/.grit/projects/<key>/`, so **nothing** in the project is meant to be committed for the record. The walkthrough above predates that decision; the mode, tracking model and ledger it shows are unaffected.)*
 
 ---
 

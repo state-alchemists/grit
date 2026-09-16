@@ -115,6 +115,8 @@ def _properties():
         _property_ignores_read_tools,
         _property_off_switches_work,
         _property_off_switch_cli,
+        _property_legacy_off_marker_still_silences,
+        _property_hook_log_is_read_by_daemon_and_verify,
         _property_ask_can_be_disabled,
         _property_duplicate_event_counted_once,
         _property_identical_retry_is_not_swallowed,
@@ -219,6 +221,78 @@ def _property_off_switch_cli(fx: HookFixture) -> None:
         [sys.executable, HOOK, "--on", fx.proj], env=env, capture_output=True, check=True
     )
     assert not os.path.exists(marker), "--on did not remove the marker"
+
+
+def _property_legacy_off_marker_still_silences(fx: HookFixture) -> None:
+    # A `touch .grit/off` written before the project-folder restructure still
+    # silences the hook. Dropping it would silently re-enable recording on an
+    # upgraded machine whose user had deliberately switched the project off, and
+    # silence is the one failure mode this product cannot let happen silently.
+    legacy = os.path.join(fx.proj, ".grit", "off")
+    os.makedirs(os.path.dirname(legacy), exist_ok=True)
+    open(legacy, "w").close()
+    try:
+        assert (
+            fx.run(fx.write_event(session="legacy-off")) == ""
+        ), "a legacy .grit/off marker did not silence the hook"
+    finally:
+        os.remove(legacy)
+
+    # And `grit-hook.py --on` removes the legacy marker too, so a user silenced
+    # before the restructure can reliably turn the recording back on.
+    env = dict(os.environ, GRIT_ROOT=fx.root)
+    os.makedirs(os.path.join(fx.proj, ".grit"), exist_ok=True)
+    open(legacy, "w").close()
+    sp.run(
+        [sys.executable, HOOK, "--on", fx.proj], env=env, capture_output=True, check=True
+    )
+    assert not os.path.exists(legacy), "--on did not clear the legacy marker"
+
+
+def _property_hook_log_is_read_by_daemon_and_verify(fx: HookFixture) -> None:
+    # One project key, derived independently in three tools — the hook writes
+    # `projects/<key>/authorship.jsonl`, the daemon aggregates it, and
+    # verify_edit clears a handover against it. If the derivations drift, the
+    # hook writes to a directory the other two never look in: the dashboard
+    # shows nothing and no task verifies, with no error anywhere. Nothing
+    # pinned that until this test, which runs the real hook and then asks both
+    # readers to find the log it actually wrote.
+    repo = tempfile.mkdtemp(prefix="grit-chain-")
+    root = tempfile.mkdtemp(prefix="grit-chain-root-")
+    try:
+        _init_repo(repo)
+        run(
+            {
+                "tool_name": "Write",
+                "session_id": "chain",
+                "cwd": repo,
+                "tool_input": {
+                    "file_path": os.path.join(repo, "b.py"),
+                    "content": "w=2\n",
+                },
+            },
+            root,
+        )
+        log = os.path.join(get_project_dir(root, repo), "authorship.jsonl")
+        assert os.path.exists(log), "the hook did not write under the shared key"
+
+        skill = os.path.join(os.path.dirname(os.path.dirname(HOOK)), "skills", "grit")
+        sys.path.insert(0, skill)
+        import serve
+
+        projects = serve.State(root).authorship()["projects"]
+        assert [p["project"] for p in projects] == [os.path.realpath(repo)], (
+            "the daemon did not find the log the hook wrote: %r" % projects
+        )
+
+        _verify_edit_cmd(repo, "snapshot", "chain", root=root)
+        open(os.path.join(repo, "a.py"), "a").write("q=9\n")
+        assert (
+            _verify_edit_cmd(repo, "verify", "chain", root=root) == 0
+        ), "verify_edit did not see the log the hook wrote"
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def _property_ask_can_be_disabled(fx: HookFixture) -> None:

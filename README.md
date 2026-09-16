@@ -156,7 +156,7 @@ It fires on every tool call that can write a file — `Write`, `Edit`, `Notebook
 1. **Records who wrote the code**, to `~/.grit/projects/<project-key>/authorship.jsonl` — keyed by the project's path, not stored inside it. Edits (`Write`, `Edit`, `NotebookEdit`) are recorded exactly, with line counts. Shell calls (`Bash`, `PowerShell`) are recorded as **opaque** — an assistant can write files with `python3 - <<EOF` or `sed -i`, and nothing observes what those touched. Recording the call without a line count is weaker than seeing the edit, but "something unattributable happened" is true and silence is not: without this, shell-written code reads as human-written.
 2. **Asks once per session**, the first time the assistant reaches for the editor. Once. A prompt on every edit is how a tool gets uninstalled.
 
-Turn it off three ways: `grit-hook.py --off` from inside a project, `GRIT_OFF=1` everywhere, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` (which keeps the recording and drops the prompt).
+Turn it off three ways: `grit-hook.py --off` from inside a project, `GRIT_OFF=1` everywhere, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` (which keeps the recording and drops the prompt). A `touch .grit/off` written before the upgrade still counts — installing a new version never silently re-enables a recording you stopped.
 
 ## Try it
 
@@ -169,7 +169,7 @@ Open the URL it prints. You will get the onboarding gate and a dashboard with **
 
 ```bash
 python3 skills/grit/test_serve.py    # 13 integrity properties
-python3 hooks/test_hook.py           # 17 hook properties
+python3 hooks/test_hook.py           # 19 hook properties
 python3 skills/grit/score.py selftest  # 18 scoring properties
 python3 bin/check_docs.py            # every factual claim in these docs
 ```

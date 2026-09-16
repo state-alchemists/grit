@@ -23,6 +23,8 @@ OFF SWITCHES
   grit-hook.py --off       per project (run from the project directory)
   "ask_on_first_edit":false in ~/.grit/preferences.json — keeps the recording,
                            drops the prompt
+  touch .grit/off          legacy per-project marker, still honored so an
+                           upgrade never silently re-enables the recording
 """
 
 from __future__ import annotations
@@ -96,25 +98,34 @@ def main() -> None:
 
 
 def _set_project_off(off: bool, cwd: str) -> None:
-    """`--off`/`--on` CLI: flip the per-project killswitch without needing to
-    know its hashed path."""
-    project_dir = _get_project_dir(HOME_ROOT, cwd)
-    marker = os.path.join(project_dir, "off")
-    if off:
-        os.makedirs(project_dir, exist_ok=True)
-        open(marker, "w").close()
-        print("grit: off for %s" % os.path.realpath(cwd))
-    else:
-        if os.path.exists(marker):
-            os.remove(marker)
-        print("grit: on for %s" % os.path.realpath(cwd))
+    """`--off`/`--on` CLI: flip the killswitch without needing to know its hashed
+    path. Toggles both the current marker and the legacy `<project>/.grit/off`,
+    so `--on` also revives a project that was silenced before the restructure."""
+    _flip_marker(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"), off)
+    _flip_marker(os.path.join(cwd, ".grit", "off"), off)
+    print("grit: %s for %s" % ("off" if off else "on", os.path.realpath(cwd)))
+
+
+def _flip_marker(path: str, create: bool) -> None:
+    if create:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+    elif os.path.exists(path):
+        os.remove(path)
 
 
 def _is_switched_off(cwd: str) -> bool:
-    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project."""
+    """`GRIT_OFF=1` kills it everywhere; an `off` marker kills it per project.
+
+    The current marker lives in `~/.grit/projects/<key>/`; a `touch .grit/off`
+    written before the restructure is still honored as well, so recording never
+    silently re-enables on an upgraded machine whose marker predates the move.
+    """
     if os.environ.get("GRIT_OFF") == "1":
         return True
-    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off"))
+    return os.path.exists(os.path.join(_get_project_dir(HOME_ROOT, cwd), "off")) or os.path.exists(
+        os.path.join(cwd, ".grit", "off")
+    )
 
 
 def _is_duplicate(event: dict[str, Any]) -> bool:
