@@ -198,6 +198,7 @@ def check_computed_values(score_module: Any) -> None:
         rel = p_.relative_to(ROOT)
         _check_plateau_claims(text, rel, computed["plateau"])
         _check_unaided_task_claims(text, rel, computed["needs_unaided"])
+        _check_sandbox_ceiling_claims(text, rel, computed["sandbox_ceiling"])
 
 
 def _compute_quotable_numbers(score_module: Any) -> dict[str, Any]:
@@ -218,20 +219,55 @@ def _compute_quotable_numbers(score_module: Any) -> dict[str, Any]:
             project="",
         )
     ] * 50
+    # DISTINCT sandbox exercises, which is the beginner path: the score climbs
+    # but the LEVEL must not, because `proven` is gated on repository work.
+    # Three docs now tell beginners where that ceiling is; none of them could
+    # notice PROVEN_NEEDS_UNAIDED_TASKS dropping to 0 underneath them.
+    many = [
+        score_module.EvidenceRow(
+            at="2026-01-01T00:00:00+00:00",
+            concept="c",
+            source="sandbox",
+            assistance="none",
+            task="t%d" % i,
+            failed=False,
+            project="",
+        )
+        for i in range(12)
+    ]
     return {
         "plateau": round(score_module.score_concept(grounded, now).score, 4),
         "needs_unaided": score_module.PROVEN_NEEDS_UNAIDED_TASKS,
+        "sandbox_ceiling": score_module.score_concept(many, now).level,
     }
 
 
 def _check_plateau_claims(text: str, rel: Any, plateau: float) -> None:
-    for m in re.finditer(r"plateaus? (?:at|around|to) ([0-9.]+)", text):
+    # `[0-9.]+` also swallowed a sentence-ending full stop, so "plateaus at
+    # 0.30." captured "0.30." and float() raised: the checker crashed on prose
+    # that was correct. Match a number, not a run of number-ish characters.
+    for m in re.finditer(r"plateaus? (?:at|around|to) ([0-9]+(?:\.[0-9]+)?)", text):
         if abs(float(m.group(1)) - plateau) > 1e-9:
             add(
                 "COMPUTED VALUE DRIFT",
                 rel,
                 "doc says the plateau is %s; the model computes %s"
                 % (m.group(1), plateau),
+            )
+
+
+def _check_sandbox_ceiling_claims(text: str, rel: Any, ceiling: str) -> None:
+    """A doc telling a beginner how far exercises alone can take them must name
+    the level the model actually produces from a pile of distinct sandbox
+    events. Said in three files now, and derived in none of them."""
+    pat = r"(?:ceiling of|caps? at|tops? out at)\s+`?(unproven|recall|proven)`?"
+    for m in re.finditer(pat, text, re.I):
+        if m.group(1).lower() != ceiling:
+            add(
+                "COMPUTED VALUE DRIFT",
+                rel,
+                "doc says sandbox work tops out at `%s`; the model computes `%s`"
+                % (m.group(1), ceiling),
             )
 
 
@@ -357,6 +393,9 @@ def check_adr_index() -> None:
             )
 
 
+CLASS_COUNT = 0
+
+
 def _run_checks() -> None:
     """Every class of claim, in reading order. Each appends to `findings`."""
     serve = (SKILL / "serve.py").read_text()
@@ -364,28 +403,37 @@ def _run_checks() -> None:
     install = (ROOT / "bin" / "install.sh").read_text()
     verify = (SKILL / "verify_edit.py").read_text()
 
-    check_paths(serve, score)
-    check_runtime_files(serve, score)
-    check_endpoints(serve)
-    check_cli_flags(serve, install)
-    check_scoring_constants(score)
-    check_verdicts(verify)
-    check_test_counts()
-
     sys.path.insert(0, str(SKILL))
     import score as S
 
-    check_computed_values(S)
-    check_cross_doc_agreement()
-    check_adr_citations()
-    check_section_citations()
-    check_adr_index()
+    # A list, so the printed count is the number of classes that actually ran.
+    # It was a hardcoded 13 against twelve calls — this file's whole argument is
+    # that a number in prose drifts from the thing it describes, and its own
+    # summary line was the counterexample.
+    classes = [
+        lambda: check_paths(serve, score),
+        lambda: check_runtime_files(serve, score),
+        lambda: check_endpoints(serve),
+        lambda: check_cli_flags(serve, install),
+        lambda: check_scoring_constants(score),
+        lambda: check_verdicts(verify),
+        lambda: check_test_counts(),
+        lambda: check_computed_values(S),
+        lambda: check_cross_doc_agreement(),
+        lambda: check_adr_citations(),
+        lambda: check_section_citations(),
+        lambda: check_adr_index(),
+    ]
+    for run_class in classes:
+        run_class()
+    global CLASS_COUNT
+    CLASS_COUNT = len(classes)
 
 
 def main() -> int:
     _run_checks()
     if not findings:
-        print("docs ok — 13 classes of claim checked against the code")
+        print("docs ok — %d classes of claim checked against the code" % CLASS_COUNT)
         return 0
     _print_findings()
     return 1

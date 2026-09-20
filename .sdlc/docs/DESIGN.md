@@ -58,9 +58,11 @@ Never promise growth. The ceiling is harm avoidance, and saying so is not modest
 
 **Built but unautomated:** tutorials. The assistant writes one against a measured gap and the runtime scores it; nothing batches, caches, shares or pre-validates them.
 
-**Out of scope entirely:** team or hosted features, cross-user benchmarking, a tutorial library, non-coding domains, and any claim beyond harm avoidance.
+**Out of scope entirely:** team or hosted features, cross-user benchmarking, a tutorial library, **anything without an executable oracle**, and any claim beyond harm avoidance.
 
-Non-coding domains are excluded for a specific reason rather than a preference: everything here rests on a check that runs and either passes or fails. Project management has no `npm test`. Without an oracle the first gate degrades to *"the user says they understand"*, which is the self-report the whole design replaces — and one fictional row makes the record worthless.
+The exclusion is the oracle, not the domain, and stating it as "non-coding domains" was wrong in a way that cost real users. Everything here rests on a check that runs and either passes or fails. Project management has no `npm test`; without one the first gate degrades to *"the user says they understand"*, which is the self-report the whole design replaces, and one fictional row makes the record worthless. That argument disqualifies project management. It does not disqualify a subject merely because the person asking has no repository yet — a sandbox exercise with a real differential check is an oracle, whoever is sitting in front of it.
+
+Read as "non-coding domains", the rule turned away beginners, who are the population [the novice study on the front page](../../README.md#the-problem) found were harmed most. The scoring model never needed them turned away: a sandbox source is worth 0.2 against 0.5, and no quantity of exercises reaches `proven`, which is gated on two distinct unaided repository tasks. Sandbox work tops out at `recall` and goes no further, which is a true statement about someone who has not yet shipped any of it.
 
 ---
 

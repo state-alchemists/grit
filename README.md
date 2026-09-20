@@ -46,6 +46,34 @@ flowchart TD
 
 **You do not have to be trusted for any of this.** The hook observes every byte the assistant writes, so the `assistance` coefficient is measured rather than declared. If the AI wrote it, the concept earns zero whatever anyone intended.
 
+## How to use it
+
+Install it, and then mostly forget it — the hook raises the offer the first time the assistant reaches for your editor in a session, once, and never again that session. Everything below is for when you want to drive rather than be asked.
+
+**Ask for the work, and say you want it.** There is no command for this. Plain words in the middle of ordinary work:
+
+> *let's add the retry backoff — I'll write it myself*
+
+The assistant names the concepts it thinks that exercises, you correct them (they are your names, not its), you write the code, your test decides, and it checks the git history to see who actually typed it. Say *just do it* instead and it will, and nothing is scored. That is a legitimate answer, and it only has to be a chosen one.
+
+**Learn something you have never touched.** You do not need a repository, only something a check can decide:
+
+> *I want to learn assembly — I have no experience*
+
+You get an ordered list of concepts and **one** exercise written against the first, with a real check. Not a twelve-part course: each exercise is written by hand when you reach it. Exercises top out at `recall` no matter how many you do — `proven` needs two distinct unaided tasks in a real repository, because nothing else shows you can do it in your own stack.
+
+Ask for something with no oracle — *teach me project management* — and it will decline, say why, and then just help you normally, untracked. It cannot check it, so it will not pretend to measure it.
+
+**See where you stand.**
+
+> `/grit`
+
+Reports whether the hook is actually registered on this machine, what the assistant has written in this project, and the dashboard link. It does not start anything.
+
+**Correct a record you think is wrong.** You cannot, and that is the design. There is no edit, no override, no "actually I did know that." The remedy is another measurement: do another task. This applies when the assistant got it wrong too — that is the exact case an audit trail exists for.
+
+**Turn it off.** `GRIT_OFF=1` everywhere, `python3 hooks/grit-hook.py --off` in one project, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` to keep the recording and drop the prompt.
+
 ## The score
 
 `credit = source_weight × assistance × novelty`, summed per concept and capped at 1.0.

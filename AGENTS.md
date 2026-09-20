@@ -88,7 +88,7 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 **Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead. The exception is `.sdlc/CONVENTIONS.md`, which documents the skill suite's own protocol rather than how to work here — it owns its own row, and nothing about this repository belongs in it.
 
-**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes: paths, links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR existence**, and ADR statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
+**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes — and the count is `len()` of the list it runs, not a number in a string: paths and links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR citations**, **section citations**, and ADR index statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
 
 ---
 

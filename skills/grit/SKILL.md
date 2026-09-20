@@ -25,27 +25,66 @@ An explicit invocation is **not** a request to start the loop — there is usual
 
 Then stop. Do not offer the 1/2/3 choice, do not probe, do not create tasks. If they follow up with actual work, the rest of this file applies.
 
-## Requests this skill cannot serve — say so, do not improvise
+## The one test: is there an oracle?
 
-**"I want to learn about project management."** / **"Teach me systems design."** / any topic with no repository behind it.
+**The question is never "is there a repository?" — it is "can a check decide this, and run?"** Those come apart, and treating them as one turned away every beginner the product was built for.
 
-Decline plainly, in one short paragraph, and then just help them normally. Two reasons, and give whichever is true:
+| Request | Oracle | What you do |
+|---|---|---|
+| "Teach me project management" / "explain systems design" | **none** | decline, then help normally |
+| "Teach me assembly, I have no experience" | a sandbox check you write | **serve it** — tutorial, `--source sandbox`, ceiling of `recall` |
+| "Add rate limiting to this route" | their own test suite | the full loop |
 
-1. **A tutorial has to be written, by you, against a check that runs.** That is affordable for a coding concept in a real repository and not for a topic with no code behind it — there is nothing to check.
-2. **Ungrounded topics have no oracle.** Everything here rests on a check that runs and either passes or fails. Project management has no `npm test`. Without it the first of the three gates degrades to *"the user says they understand"* — which is the self-report this entire design exists to replace. A concept recorded as **earned** on that basis would be fiction, and one fictional row makes the whole record worthless.
+### When there is no oracle — decline, do not improvise
 
-So: **never** create a task, a tutorial, or a ledger entry for an ungrounded request. Never record anything as earned without an executable check that actually ran.
+**"I want to learn about project management."** / **"Teach me systems design."**
+
+Decline plainly, in one short paragraph, and then just help them normally:
+
+**Ungrounded topics have no oracle.** Everything here rests on a check that runs and either passes or fails. Project management has no `npm test`. Without one the first of the three gates degrades to *"the user says they understand"* — which is the self-report this entire design exists to replace. A concept recorded as **earned** on that basis would be fiction, and one fictional row makes the whole record worthless.
+
+So: **never** create a task, a tutorial, or a ledger entry when nothing can check the result. Never record anything as earned without an executable check that actually ran.
 
 What to do instead: answer the question as well as you can, as an ordinary assistant, and say in a sentence that grit is not tracking it. Being useful and being honest about the boundary are not in tension — pretending to measure is what breaks trust.
 
-The same applies to a coding topic with no code yet. "Teach me token buckets" with no repository is the same problem wearing a hoodie.
+### When there is an oracle but no repository — serve it, at sandbox weight
+
+Someone starting from zero has no repository, and that is the *reason* they need this rather than a reason to turn them away. The research this product cites on its own front page is a study of **novices** being harmed by assistance; sending them away is the one outcome that cannot be defended.
+
+Nothing needs bending to serve them, because the arithmetic already says the honest thing:
+
+- A sandbox tutorial is worth **0.2**, against **0.5** for real work.
+- Tutorials alone climb toward 1.00 but the *level* stays `recall` **forever** — `proven` is hard-gated on two distinct unaided repository tasks. There is no sequence of exercises that fakes having shipped something.
+- Grinding one tutorial plateaus at 0.30. Only *distinct* exercises move the number at all.
+
+So a beginner can earn `recall` and never more, which is exactly true of them. Say that out loud when you start: **an exercise shows you can implement the idea; it does not show you can do it in a real codebase, and the level will say so until you have.**
+
+The grounding rule still applies wherever there is code to ground in — name the real file, the real line. When there is none, a generic exercise is the only option available and it is still honest. It simply earns less, which the model already handles.
+
+## Starting from zero — a sequence, not a syllabus
+
+*"I want to learn X, I have no experience"* is answerable. What you produce is **an ordered list of concept names**, and then **one tutorial**.
+
+The distinction is the whole thing. A list of concepts is a plan and costs nothing if it turns out wrong. A list of lessons is twelve promises, and you write tutorials by hand, one at a time — so eleven of them are promises nothing will keep. Never print a numbered course and imply the pages exist.
+
+How to do it:
+
+1. **Ask what the goal is, once.** "Learn assembly" spans *read what my compiler emits* and *write a bootloader*, and those are different sequences. One question, then proceed on the answer.
+2. **Name five to nine concepts in dependency order**, by the same rules as any other concept name — lowercase, kebab-case, the transferable idea. Check `score.py concepts` first; if they already have some of these, say so and start further along.
+3. **Say plainly that this is a map, not a course.** The concepts are named; the exercises get written one at a time, by you, when they reach each one.
+4. **Write the first tutorial now.** One. Against the first concept, with a real check. Then stop and let them do it.
+5. **Re-cut the sequence after each result.** A pass means move on; a failed check or an unsound justification means the next tutorial is on that same concept from a different angle. The *check* decides what comes next — never the fact that they said they didn't know something.
+
+That last point is the rule the rest hangs off. **What they tell you they don't know may set what gets offered. It may never set what gets recorded.** A beginner saying "I have no experience" is not the dangerous claim — the dangerous one is "I know this already", which is why nothing here routes *past* an exercise on a say-so. Routing someone *into* a check costs them an exercise they did not need. Routing them past one costs the entire point of the product.
+
+**Do not build this as a separate skill or a stored file.** The sequence is a few lines of conversation, regenerated whenever it is wrong, and cheaper to rewrite than to keep in sync. A curriculum saved to disk is a second record that nothing verifies, sitting next to one that verifies everything.
 
 ## When NOT to activate
 
 This skill is for work whose *skill* the user might want to keep. It is not for every request that touches a file. Stay out of:
 
 - **Scaffolding and setup** — creating directories, build files, config, boilerplate, installers. Nobody is retaining a `CMakeLists.txt`.
-- **Greenfield with nothing to measure yet.** If the repository has no code for the concept in question, there is no handover to check and no acceptance check to run.
+- **Greenfield with nothing to measure yet.** If the repository has no code for the concept in question, there is no handover to check. This is about *volunteering* during work — it is not a reason to turn down someone who asked to learn something. That request has its own path above.
 - **A task already underway.** If the user has scoped the work and you are mid-flight, do not stop and re-offer. That resets a conversation they were happy with.
 - **Anything the user has already said they want done for them.**
 
