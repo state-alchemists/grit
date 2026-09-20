@@ -28,6 +28,11 @@ SKILL = ROOT / "skills" / "grit"
 # Historical by declaration: a worked example of a flow that no longer exists.
 HISTORICAL = {"USAGE.md"}
 
+# Vendored by the sdlc-* skills: a path catalogue and fill-in templates that
+# describe what those skills would generate, not what this repository has. Their
+# unfilled `{{placeholders}}` and forward references are not claims about grit.
+VENDORED = ("CONVENTIONS.md", ".sdlc/templates/")
+
 # (kind, where, message) — `where` is a path or a label, always stringified.
 Finding = tuple[str, str, str]
 findings: list[Finding] = []
@@ -40,7 +45,10 @@ def add(kind: str, where: Any, msg: str) -> None:
 def live_docs() -> Iterator[tuple[pathlib.Path, str]]:
     """Every doc that is meant to describe the product as it is today."""
     for p in sorted(ROOT.rglob("*.md")):
+        rel = p.relative_to(ROOT).as_posix()
         if ".git" in p.parts or p.name in HISTORICAL:
+            continue
+        if any(v in rel for v in VENDORED):
             continue
         text = p.read_text(encoding="utf-8")
         if re.search(r"\*\*Status\*\*:\s*\*?\*?Superseded", text):

@@ -80,10 +80,11 @@ New tests follow the same shape. A test here is a **property**, named for what b
 | Individual decisions and rejected options | [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) |
 | What the assistant does at runtime | [skills/grit/SKILL.md](skills/grit/SKILL.md) |
 | Props that look like features but are not | [.sdlc/docs/dev-fixtures.md](.sdlc/docs/dev-fixtures.md) |
+| The `sdlc-*` skill protocol — artifact paths, EARS dialect, ID scheme | [.sdlc/CONVENTIONS.md](.sdlc/CONVENTIONS.md) |
 
 Before adding a document, find the one that already owns that layer. `ARCHITECTURE.md` exists because `DESIGN.md` had drifted into documenting files no code wrote — `profile.json`, `tasks.json`, `checks/`, `missions/` — while never mentioning the two that carried all the real data.
 
-**Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead.
+**Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead. The exception is `.sdlc/CONVENTIONS.md`, which documents the skill suite's own protocol rather than how to work here — it owns its own row, and nothing about this repository belongs in it.
 
 **A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes: paths, links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR existence**, and ADR statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
 
