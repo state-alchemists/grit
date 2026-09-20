@@ -40,8 +40,8 @@ One caveat: project state — the authorship log, snapshots and the per-project 
 
 ```sh
 python3 skills/grit/test_serve.py      # 13 integrity properties
-python3 hooks/test_hook.py             # 19 hook properties
-python3 skills/grit/score.py selftest  # 18 scoring properties
+python3 hooks/test_hook.py             # 20 hook properties
+python3 skills/grit/score.py selftest  # 19 scoring properties
 ```
 
 Every case in all three is a defect that actually shipped. Read the comments before changing one.

@@ -123,6 +123,7 @@ def _properties():
         _property_ask_markers_stay_bounded,
         _property_garbage_input_is_safe_and_traced,
         _property_verify_edit_distinguishes_outcomes,
+        _property_error_exits_are_not_verdicts,
         _property_shell_call_forces_unverified,
         _property_bash_is_opaque_and_silent,
         _property_missing_script_cannot_block,
@@ -435,6 +436,37 @@ def _property_verify_edit_distinguishes_outcomes(fx: HookFixture) -> None:
     finally:
         shutil.rmtree(repo, ignore_errors=True)
         shutil.rmtree(root, ignore_errors=True)
+
+
+def _property_error_exits_are_not_verdicts(fx: HookFixture) -> None:
+    # A failure to run must not share an exit code with a verdict. Every error
+    # path used to return 1 (ASSISTED) or 2 (NOTHING CHANGED), and SKILL.md
+    # tells the assistant to branch on exactly those numbers — so a mistyped
+    # task id scored the user's unaided work as `assistance: full`, and a bad
+    # subcommand threw a real task away as "the check was already green".
+    verdicts = {0, 1, 2, 3}
+    repo = tempfile.mkdtemp(prefix="grit-exit-")
+    try:
+        _init_repo(repo)
+        assert _verify_edit_cmd(repo, "verify", "never-snapshotted") not in verdicts, (
+            "a missing snapshot must not read as a verdict"
+        )
+        assert _verify_edit_cmd(repo, "notacommand", "t") not in verdicts, (
+            "an unknown subcommand must not read as a verdict"
+        )
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+
+    # Outside git there is nothing to snapshot, so snapshot is an error — but
+    # `verify` against a stale snapshot is UNVERIFIED, which is what the
+    # message and bin/install.sh have always said it was.
+    plain = tempfile.mkdtemp(prefix="grit-nogit-")
+    try:
+        assert _verify_edit_cmd(plain, "snapshot", "t") not in verdicts, (
+            "snapshot outside git must not read as a verdict"
+        )
+    finally:
+        shutil.rmtree(plain, ignore_errors=True)
 
 
 def _property_shell_call_forces_unverified(fx: HookFixture) -> None:

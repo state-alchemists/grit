@@ -151,6 +151,7 @@ python3 <skill-dir>/verify_edit.py verify <task-id>
 | `ASSISTED` | 1 | `full` — you wrote part of it, so it scores zero |
 | `NOTHING CHANGED` | 2 | **record nothing.** The check was already green |
 | `UNVERIFIED` | 3 | `full`. Nobody can prove who typed it, so it cannot count as theirs |
+| *(not a verdict)* | 64 | **record nothing, and say why.** The tool could not run — usually no snapshot for that task id. Fix the invocation and re-run; never guess the verdict |
 
 **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.
 
@@ -240,7 +241,7 @@ If the file is missing, or connecting fails, the daemon is not running — start
 
 What you need to know to use it correctly:
 
-- **It binds to localhost only**, and it is the only thing that writes the record. Never hand-edit `ledger.json` or `evidence.jsonl` to make something true. The profile is recomputed from evidence on every read — editing it is not even possible.
+- **It binds to localhost only**, and it is the only thing that writes the record. Never hand-edit `ledger.json` or `evidence.jsonl` to make something true. Nothing prevents you — they are files on their disk — but the profile is recomputed from evidence on every read, so there is no stored score to edit, only the evidence underneath it. Forging that changes the number and proves nothing, which is the whole reason the number is derived.
 - **You cast the third gate, and you have a separate credential for it.** Launching a tutorial prints a ready-to-run command to the daemon's terminal. Read the user's justification, decide, then run it:
 
 **Copy the command the daemon printed to its own terminal** — it already contains the correct address and token. Do not assemble your own from memory; the port may not be the default.
