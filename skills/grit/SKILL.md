@@ -208,7 +208,13 @@ There is no lesson library. "Teach me X" creates a task, not a document.
 
 Each one is a self-contained interactive page where the user writes code and a check runs.
 
-Three properties that must survive every edit:
+**Three things the template can do that a plain exercise cannot.** All three are off unless you switch them on, so a tutorial written without them still works — and all three are there to make the page *teach*, not to decorate it:
+
+- **A trace.** Return `frames` from the check — `[{label, cells: {name: value}, note}]` — and the page renders a step-through above the result, highlighting what changed on each step. Use it when the mechanism is a *sequence the user cannot hold in their head*: registers after each instruction, a bucket refilling per tick, a parser's stack per token. It renders on a failure too, which is the point — watching where a run diverged is worth more than being told it did. A frame per step of something already obvious from the answer is decoration, and decoration is how the one tutorial that needed a trace ends up looking like all the others.
+- **A language that is not JavaScript.** Set `IS_SOURCE_TEXT = true` in the check source and the page stops requiring a function called `solve`, handing your check the textarea verbatim. The user writes assembly, a query, a grammar; you write the interpreter in JS and decide pass or fail. The concept still has to be modellable in JS — that constraint has not moved — but the user's keyboard is no longer bound to it.
+- **Predict before you run.** Fill in the `PREDICTION` slot with one concrete question about what the code will *do* — which case fails first, what is in that register at the end — not "do you understand this?". The page asks once before the first run, locks the answer once they run, and sends it to you with the justification. Judge the two together: a prediction that missed, followed by a confident explanation of why it was always going to work, is the after-the-fact story you are told to catch, and it is the only part of the page they cannot write once they have seen the result.
+
+Properties that must survive every edit:
 
 - **The self-test runs at worker scope and is not a function body.** A top-level `return` is a SyntaxError that kills the worker and reports as "self-test threw". Use an IIFE or if/else.
 

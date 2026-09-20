@@ -120,9 +120,19 @@ h2{font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.14e
 .meter{height:6px;border-radius:4px;background:var(--border);margin:10px 0 6px;overflow:hidden}
 .meter i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
   width:0;transition:width .7s ease-out}
-.node dl{display:flex;gap:12px;margin:8px 0 0;font-size:.74rem;color:var(--muted)}
+.node dl{display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 0;font-size:.74rem;color:var(--muted)}
 .node dl div{display:flex;gap:5px}
 .node dt{opacity:.75}
+/* The next step is the only line on a card that tells you what to do, so it
+   gets the card's foreground colour and a rule above it. Everything else here
+   is a reading of the past. */
+.node .next{margin:10px 0 0;padding-top:9px;border-top:1px solid var(--border);
+  font-size:.76rem;line-height:1.5}
+.node .next b{color:var(--accent);font-weight:600}
+.node .decay{margin:6px 0 0;font-size:.72rem;color:var(--warn)}
+.node .ask{width:100%;margin-top:10px;padding:6px 10px;font-size:.71rem;
+  background:transparent;color:var(--muted);text-align:center}
+.node .ask:hover{color:var(--fg)}
 
 /* Fires once when a concept's level improves between polls (render() tracks
    PREV_LEVELS and adds this class; it removes itself on animationend, never
@@ -419,10 +429,45 @@ function buildConceptCard(name, c, justLeveled) {
       <div><dt>unaided</dt><dd>${c.unaided_tasks || 0}</dd></div>
       <div><dt>repos</dt><dd>${c.projects || 0}</dd></div>
     </dl>
-    ${c.blocked_by ? `<div class="muted" style="font-size:.72rem;margin-top:6px">
-       ⚑ ${escapeHtml(c.blocked_by)}</div>` : ""}
+    ${c.blocked_by
+      ? `<p class="next"><b>Next</b> &middot; ${escapeHtml(c.blocked_by)}</p>`
+      : `<p class="next"><b>Proven</b> &middot; nothing further is required.</p>`}
+    ${c.decays_in_days !== null && c.decays_in_days <= DECAY_WARN_DAYS
+      ? `<p class="decay">◴ evidence starts halving in ${c.decays_in_days} days</p>` : ""}
+    <button class="ask" data-concept="${escapeHtml(name)}">Copy a prompt for this</button>
   </div>`;
 }
+
+// Only worth saying when it is close. A countdown on every card is noise, and
+// noise is how the one card that actually needed reading gets skipped.
+const DECAY_WARN_DAYS = 30;
+
+// The grid answers "what should I work on", so it is ordered by that and not
+// by the alphabet: unproven first, and inside each level the highest score
+// first, because that is the concept closest to moving.
+function compareByNeed(concepts) {
+  return (a, b) =>
+    (LEVEL_RANK[concepts[a].level] || 0) - (LEVEL_RANK[concepts[b].level] || 0)
+    || (concepts[b].score || 0) - (concepts[a].score || 0)
+    || a.localeCompare(b);
+}
+
+// The dashboard is otherwise read-only: every next step it names has to be
+// carried to the assistant by hand. This is the whole handoff.
+$("#concepts").onclick = async (e) => {
+  const btn = e.target.closest(".ask");
+  if (!btn) return;
+  const text = `Let's do a task on ${btn.dataset.concept} — I'll write it myself.`;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "Copied — paste it to your assistant";
+  } catch (err) {
+    // Clipboard denied. Show the text rather than failing silently; the user
+    // can still select it.
+    btn.textContent = text;
+  }
+  setTimeout(() => { btn.textContent = "Copy a prompt for this"; }, 4000);
+};
 
 async function render() {
   FAILED.clear();
@@ -517,7 +562,8 @@ async function render() {
     }
   }
   $("#concepts").innerHTML = names.length
-    ? names.sort().map(n => buildConceptCard(n, concepts[n], justLeveled.has(n))).join("")
+    ? names.sort(compareByNeed(concepts))
+           .map(n => buildConceptCard(n, concepts[n], justLeveled.has(n))).join("")
     : `<div class="empty" style="grid-column:1/-1"><b>Nothing measured yet</b>
        Ask the assistant to start a task you will do yourself. When your check passes and
        the assistant did not write the code, the concept lands here.</div>`;

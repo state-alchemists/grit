@@ -25,9 +25,9 @@ Conventions for working in this repository that you **cannot get by reading the 
 Almost every defect in this repository's history was found by executing something, and missed by reading it. Reading finds the bug you were already looking for.
 
 ```sh
-python3 skills/grit/test_serve.py      # 14 integrity properties
+python3 skills/grit/test_serve.py      # 15 integrity properties
 python3 hooks/test_hook.py             # 20 hook properties
-python3 skills/grit/score.py selftest  # 19 scoring properties
+python3 skills/grit/score.py selftest  # 21 scoring properties
 python3 bin/test_study_report.py       # 5 study_report properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
@@ -38,6 +38,7 @@ Specific forms of this that have each cost real time:
 - **Quoting a number in prose? Compute it first.** `SKILL.md` once put a tutorial's ceiling at `0.4` and kept saying so through a change that halved every weight, because that figure was never anything but a sentence. Running the model gave `0.30`. (`check_docs.py` now computes it — and it flagged this very bullet when the sentence was phrased as a live claim, which is the check working.)
 - **Writing a copy-paste block? Paste it.** A README block once contained a literal `/ABSOLUTE/PATH/TO/` placeholder inside a quoted heredoc. Pasting it registered a hook pointing at a nonexistent script, and a missing script makes Python exit `2` — which both runtimes read as *block this tool call*. It broke every file write in the user's project.
 - **A browser fetch is not a DOM dump.** Headless Chrome's `--dump-dom` returns before `fetch()` resolves, so a working dashboard reads as blank. Check the endpoints with `curl`, or check the page with something that actually waits.
+- **A headless screenshot has its own clock.** `--virtual-time-budget` advances `setTimeout` far faster than a Worker thread runs, so a tutorial check costing 0.7ms trips the page's own 4-second guard and photographs as *"Timed out — possible infinite loop."* The product was fine; the camera was not. For anything behind a Worker, drive the page's functions against a stubbed DOM and assert on what they wrote — a screenshot is for reading a layout, not for deciding whether logic ran.
 - **`str.replace` returns silently when nothing matched.** Every scripted edit asserts its anchor first: `assert old in s, "ANCHOR NOT FOUND"`. This has quietly produced no-op "fixes" more than once.
 
 **Do not deliver broken product.** If you changed installation, run the installer. If you changed the daemon, start it and hit the routes.

@@ -99,6 +99,7 @@ def main() -> None:
             lambda: _property_pending_survives_restart(fx, root),
             lambda: _property_stale_pending_shows_its_age(fx, root),
             lambda: _property_mechanism_off_is_visible(fx, root),
+            lambda: _property_prediction_reaches_the_judge(fx, root),
         ]
         for check in properties:
             check()
@@ -310,6 +311,31 @@ def _property_preferences_round_trip(fx: Fixture) -> None:
         _post(fx.base, "/preferences", {"theme": "../etc"})[1]["theme"]
         == serve.DEFAULT_PREFS["theme"]
     ), "unknown theme must fall back"
+
+
+def _property_prediction_reaches_the_judge(fx: Fixture, root: str) -> None:
+    # The prediction is the only thing on the page the user cannot write after
+    # seeing the result, which makes it worthless the moment it stops arriving.
+    # It rides on gate 2's payload, so a change to JustificationGate that drops
+    # the field loses it silently: the judge just sees an answer, exactly as
+    # before, with nothing on screen to say a prediction was ever made.
+    tok = fx.report_token("tb.html")
+    _post(fx.base, "/tutorial/%s/check" % tok, {"passed": True})
+    _post(fx.base, "/tutorial/%s/justification" % tok,
+          {"answer": "the guard", "prediction": "ZF is 0 so it loops"})
+    gate = fx.last_entry()["gates"]["justification"]
+    assert gate.get("prediction") == "ZF is 0 so it loops", gate
+    # And it must survive the restart that gate 3 may land after.
+    reborn = serve.State(root)
+    stored = reborn.sessions[tok].gates["justification"]
+    assert stored.get("prediction") == "ZF is 0 so it loops", stored
+
+    # A page that never asked must not invent one. An absent prediction is a
+    # fact about the attempt, and "" is how it says so.
+    tok = fx.report_token("tb.html")
+    _post(fx.base, "/tutorial/%s/check" % tok, {"passed": True})
+    _post(fx.base, "/tutorial/%s/justification" % tok, {"answer": "no prediction"})
+    assert fx.last_entry()["gates"]["justification"]["prediction"] == ""
 
 
 def _property_pending_survives_restart(fx: Fixture, root: str) -> None:

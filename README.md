@@ -73,7 +73,7 @@ The dashboard is the entry gate, not a status page ([ADR 0001](.sdlc/docs/adr/00
 
 Six themes — **Dungeon** (torchlit amber), **Terminal** (green phosphor and scanlines), **Synthwave** (neon magenta and cyan), **Forest** (moss and bark), **Arcade** (high contrast), **Paper** (light and printed). Animations can be turned off. The choice is stored in `~/.grit/preferences.json` and changeable any time from **Settings**.
 
-It reads as a game — rank badges, concept cards, a proficiency panel — and it deliberately has **no XP, no streaks, and nothing to grind.** There is a score, but it is *derived* from evidence rather than accumulated, recomputed on every read, and it can go *down*. A number you add to is a number you can farm, and a farmed record proves nothing.
+Concepts are ordered by what needs work rather than alphabetically, every card that is not `proven` says in one sentence what would prove it, and a card whose evidence is about to start ageing says how long it has. It reads as a game — rank badges, concept cards, a proficiency panel — and it deliberately has **no XP, no streaks, and nothing to grind.** There is a score, but it is *derived* from evidence rather than accumulated, recomputed on every read, and it can go *down*. A number you add to is a number you can farm, and a farmed record proves nothing.
 
 ```bash
 python3 skills/grit/serve.py --root ~/.grit     # prints its URL; also written to ~/.grit/daemon.json
@@ -168,9 +168,9 @@ python3 skills/grit/serve.py --root ~/.grit --stop     # stop it
 Open the URL it prints. You will get the onboarding gate and a dashboard with **nothing in it**, which is the honest state — see below for why.
 
 ```bash
-python3 skills/grit/test_serve.py    # 14 integrity properties
+python3 skills/grit/test_serve.py    # 15 integrity properties
 python3 hooks/test_hook.py           # 20 hook properties
-python3 skills/grit/score.py selftest  # 19 scoring properties
+python3 skills/grit/score.py selftest  # 21 scoring properties
 python3 bin/test_study_report.py     # 5 study_report properties
 python3 bin/check_docs.py            # every factual claim in these docs
 ```
@@ -227,6 +227,8 @@ Read that as: the measurement substrate is built and both evidence sources work;
 - **Acceptance checks** — command/test; a task scores on a pass, not on your say-so *(built)*
 - **Dashboard** — authorship, proficiency, six themes, auto-refresh *(built)*
 - **Tutorials as a second evidence source** — the runtime and the authoring path both work *(built)*; **no automation around them**
+- **Tutorials can trace, and need not be JavaScript** — a check can return a step-through the page renders (registers per instruction, a bucket per tick), and can take the textarea as raw source so the exercise is assembly or a query while the check stays JS *(built)*
+- **Predict before you run** — the page asks what you expect, locks it when you run, and hands it to the assistant with your justification. A prediction that missed followed by a confident explanation is the one thing a written-afterwards answer cannot hide *(built)*
 
 **Not in v1:** team or hosted features, non-coding domains, cross-user benchmarking, a tutorial library, and any claim beyond harm avoidance.
 

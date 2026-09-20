@@ -141,7 +141,7 @@ Localhost only, no cross-origin. Three responsibilities: serve the dashboard and
 | `/score`, `/profile` | per-concept levels |
 | `/authorship` | assistant-written lines per project |
 | `/tutorials`, `/ledger`, `/preferences`, `/themes`, `/health` | as named |
-| `POST /tutorial/<report-token>/{check,justification}` | gates 1 and 2 |
+| `POST /tutorial/<report-token>/{check,justification}` | gates 1 and 2 — the justification carries the user's `prediction` alongside their `answer`, so gate 3 judges both |
 | `POST /judgment/<judge-token>` | gate 3 |
 
 **Two credentials per session.** The page gets a *report* token and can only report gates 1 and 2. The *judge* token is printed to the daemon's terminal and never reaches the browser; `POST /tutorial/<report>/judgment` returns `403` on purpose. Without the split the page could award itself a pass with one `fetch()` — [ADR 0006](adr/0006-two-credentials-per-session.md).
@@ -154,7 +154,21 @@ Editing `serve.py` needs a daemon restart. Editing `dashboard.html` does not.
 
 No build step, no framework, no dependencies. Themes are CSS variable blocks; adding one means a block here and a name in `THEMES`.
 
+The concept grid is ordered by what needs work — unproven first, highest score first inside a level — and every card that is not `proven` carries the one sentence saying what would prove it, derived in `score.py` beside the level itself so the card and the arithmetic cannot disagree. Cards also count down to the point where their evidence starts halving, because ageing is the only way the score moves without the user failing anything.
+
 It **polls**: the writer is a hook process that exits immediately and has nowhere to hold a connection, so files are the handoff and a 30-second timer plus a focus listener is the refresh. It also **degrades per panel** — one failing endpoint used to reject the whole `Promise.all` and blank every tile at its static zero, which made the product look entirely broken when one route was. Now a dead endpoint names itself in the header.
+
+### `skills/grit/tutorial.template.html` — the page the assistant fills in
+
+One file, no build step, no network beyond loopback. The check and the tool's own self-test are `text/plain` blocks evaluated together at worker scope, so the self-test can reach whatever the check defines and the user's code can never see the tests.
+
+Three capabilities are declared by the authored check rather than switched on centrally, which is what keeps a tutorial written before any of them existed working unchanged:
+
+| Declared by | Effect |
+|---|---|
+| `frames` on the check's return | the page renders a step-through above the result — `{label, cells, note}` per step, changed cells highlighted. Data only: the worker cannot hand the page markup |
+| `IS_SOURCE_TEXT` at worker scope | the page stops requiring a JS function called `solve` and passes the textarea verbatim, so the exercise can be assembly, a query, a grammar. The *check* is still JS |
+| the `PREDICTION` slot | a prediction asked before the first run and locked by it. It rides along with gate 2 and is judged with the answer — the one field on the page that cannot be written after seeing the result |
 
 ### The supporting scripts
 

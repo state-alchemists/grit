@@ -16,13 +16,31 @@
   offline, from the filesystem.
 
   THE CONTRACT:
-    1. `check(userCode)` returns { pass, message } — the acceptance check.
-       It runs in a Worker. The user's code cannot see the tests.
+    1. `check(userCode)` returns { pass, message, frames? } — the acceptance
+       check. It runs in a Worker. The user's code cannot see the tests.
     2. `verify()` — the tool's own self-test. CANNOT be overridden by user code.
        If this fails, the tutorial is broken and says so.
-    3. `justification` — asked AFTER a pass, never before.
+    3. `prediction` — asked BEFORE the first run, never after.
+    4. `justification` — asked AFTER a pass, never before.
 
-  Placeholders: CONCEPT, TASK, CHECK_SOURCE, JUSTIFICATION, SOLUTION
+  Placeholders: CONCEPT, TASK, CHECK_SOURCE, JUSTIFICATION, SOLUTION, PREDICTION
+
+  TWO OPTIONAL CAPABILITIES, both declared by the check source, both off by
+  default so an existing tutorial is unaffected:
+
+    `frames` — return an array of { label, cells: {name: value}, note } and the
+    page renders a step-through above the result. Registers and flags after
+    each instruction, a bucket's level per tick, a parser's stack per token.
+    Frames are DATA, never markup: the worker cannot hand this page HTML.
+    They render on failure too — watching where your run diverged from the
+    reference is the teaching moment, and hiding it until you pass wastes it.
+
+    `IS_SOURCE_TEXT` — set it at worker scope and the page stops requiring a
+    JS function named `solve`, handing `run` the textarea's raw text instead.
+    That is what lets the exercise be written in something other than
+    JavaScript — assembly, a query, a grammar — as long as the check can
+    interpret it in JS. The concept must still be modelled in JS; this only
+    changes what the USER types.
 
   IMPORTANT — the self-test contract:
   A `text/plain` script's final expression is its value, but it is NOT executed
@@ -84,6 +102,29 @@
     background: #131317; border: 1px solid var(--border); border-radius: 6px;
     padding: 14px; overflow-x: auto; font: 13px/1.55 var(--mono); margin: 0;
   }
+  /* ── The trace stage. Rendered from `frames`, absent when a check returns
+        none, so a tutorial written before this existed still lays out right. */
+  #stage { display: none; }
+  #stage.show { display: block; }
+  #stage-at { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  .cells {
+    display: grid; gap: 8px; margin-top: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
+  .cell {
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+    background: #131317; font: 13px/1.4 var(--mono);
+  }
+  .cell span { display: block; color: var(--muted); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .07em; }
+  .cell b { font-weight: 600; word-break: break-all; }
+  /* What changed on this step is the entire point of stepping. */
+  .cell.changed { border-color: var(--accent); color: var(--accent); }
+  .cell.changed span { color: var(--accent); opacity: .75; }
+
+  #predict textarea { min-height: 76px; }
+  #predict.locked textarea { opacity: .7; }
+
   /* Preference-driven presentation. The core interaction is fixed. The BODY
      attributes below are inert defaults — `const prefs` further down is the
      one place that actually sets them at load, so that is the one to edit;
@@ -142,6 +183,20 @@
 
   <textarea id="code" spellcheck="false" autocomplete="off"></textarea>
 
+  <!-- ── Predict before you run. Asked BEFORE the first check and locked after
+       it, which is the only order in which the answer means anything: a
+       prediction written once the result is on screen is a memory of the
+       result. It is optional — the first Run click asks for one, the second
+       runs regardless. One ask, no nagging. ── -->
+  <div class="panel" id="predict">
+    <h2>Predict</h2>
+    <p class="muted" id="predict-prompt"><!-- PREDICTION: one concrete question about what
+         the code will DO — which case fails first, what the third tick prints, which
+         register holds what at the end. Not "do you understand it?". --></p>
+    <textarea id="prediction" spellcheck="false"
+      placeholder="What do you expect to happen? Optional — but it is the only part you cannot fake afterwards."></textarea>
+  </div>
+
   <div class="row">
     <button id="check">Run check</button>
     <button id="reset" class="ghost">Reset</button>
@@ -149,6 +204,19 @@
   </div>
 
   <div id="out"></div>
+
+  <!-- Populated from the check's `frames`. Stays hidden when there are none. -->
+  <div class="panel" id="stage">
+    <h2>Trace</h2>
+    <div class="row" style="margin-top:0">
+      <button class="ghost" id="stage-prev" aria-label="previous step">&#9664;</button>
+      <input type="range" id="stage-at" min="0" max="0" value="0" aria-label="step">
+      <button class="ghost" id="stage-next" aria-label="next step">&#9654;</button>
+      <span class="muted" id="stage-label"></span>
+    </div>
+    <div class="cells" id="stage-body"></div>
+    <p class="muted" id="stage-note"></p>
+  </div>
 
   <!-- ── Justification: asked AFTER a pass, never before. ── -->
   <div class="panel" id="justify" style="display:none">
@@ -194,10 +262,16 @@ const cases = [
   // { args: [...], label: "boundary: capacity exceeded" },
 ];
 
-function run(code, cases) {
-  // 1. Evaluate the user's code to obtain `solve`.
+// const IS_SOURCE_TEXT = true;   // uncomment when the user writes something
+                                  // other than JavaScript; `solve` is then null
+                                  // and `code` is the textarea verbatim.
+
+function run(code, solve, solution) {
+  // 1. Use `solve` (or parse `code` yourself under IS_SOURCE_TEXT).
   // 2. For each case, compare against the reference.
-  // 3. Return { pass, message }.
+  // 3. Return { pass, message } — plus `frames` when a step-through teaches
+  //    something the final answer does not:
+  //      frames: [{ label: "ADD A, 3", cells: { PC: 1, A: 3 }, note: "" }]
   return { pass: false, message: "CHECK_SOURCE not implemented." };
 }
 </script>
@@ -247,8 +321,12 @@ document.body.dataset.format = prefs.format;
 // ── State ────────────────────────────────────────────────────────────────────
 const codeEl = document.getElementById("code");
 const outEl = document.getElementById("out");
+const predictEl = document.getElementById("prediction");
 let passed = false;
 let solveImpl = null;
+
+const escapeHtml = (v) => String(v ?? "").replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 codeEl.value = localStorage.getItem(location.pathname + ":code") || STARTER;
 codeEl.addEventListener("input", () => {
@@ -292,6 +370,14 @@ function buildCheckWrapper() {
     self.onmessage = (e) => {
       const { code, solution } = e.data;
       try {
+        // A check that sets IS_SOURCE_TEXT wants the textarea verbatim — the
+        // user is writing assembly, a query, a grammar, something the check
+        // interprets itself. Evaluating that as JavaScript would throw before
+        // the check ever saw it.
+        if (typeof IS_SOURCE_TEXT !== "undefined" && IS_SOURCE_TEXT) {
+          self.postMessage(run(code, null, solution));
+          return;
+        }
         const solve = new Function(code + "; return typeof solve === 'function' ? solve : null;")();
         if (!solve) {
           self.postMessage({ pass: false, message: "No function named 'solve' was defined." });
@@ -392,7 +478,25 @@ function buildFallbackToken(event, payload) {
 }
 
 // ── The check ────────────────────────────────────────────────────────────────
+// `askedForPrediction` makes the prompt a one-time ask rather than a gate. A
+// tutorial that refuses to run until you have written something trains people
+// to type "dunno" to get past it, which is worse than no prediction at all.
+let askedForPrediction = false;
+
 document.getElementById("check").onclick = async () => {
+  if (!askedForPrediction && !predictEl.value.trim()) {
+    askedForPrediction = true;
+    outEl.className = "warn";
+    outEl.textContent =
+      "Predict first — say what you expect, then press Run again. "
+      + "(Press Run again to skip; it is optional.)";
+    predictEl.focus();
+    return;
+  }
+  // Whatever it says now is the prediction of record. Locking it is the only
+  // thing that makes it evidence: an editable prediction is a justification.
+  lockPrediction();
+
   outEl.textContent = "Running…";
   outEl.className = "";
 
@@ -400,6 +504,10 @@ document.getElementById("check").onclick = async () => {
     buildCheckWrapper(),
     { code: codeEl.value, solution: SOLUTION }
   );
+
+  // Before the verdict: a failed run is exactly when the trace is worth
+  // reading, so it is not gated on passing.
+  renderStage(result.frames);
 
   if (result.pass) {
     passed = true;
@@ -415,13 +523,66 @@ document.getElementById("check").onclick = async () => {
   }
 };
 
+function lockPrediction() {
+  predictEl.readOnly = true;
+  document.getElementById("predict").classList.add("locked");
+}
+
 document.getElementById("reset").onclick = () => {
   codeEl.value = STARTER;
   localStorage.removeItem(location.pathname + ":code");
   outEl.textContent = "";
   document.getElementById("justify").style.display = "none";
+  renderStage([]);
   passed = false;
+  // The prediction is NOT cleared or unlocked. Reset is for the code; letting
+  // it hand back a fresh prediction after you have seen the result turns the
+  // one unfakeable field on the page into a second justification.
 };
+
+// ── The trace stage ──────────────────────────────────────────────────────────
+// A check may return `frames` alongside its verdict. A frame is DATA, never
+// markup — { label, cells: {name: value}, note } — so a generated check cannot
+// reach the page around it, and every value goes through escapeHtml anyway.
+const stageEl = document.getElementById("stage");
+const stageAtEl = document.getElementById("stage-at");
+let FRAMES = [];
+
+function renderStage(frames) {
+  FRAMES = Array.isArray(frames) ? frames : [];
+  stageEl.classList.toggle("show", FRAMES.length > 0);
+  if (!FRAMES.length) return;
+  stageAtEl.max = String(FRAMES.length - 1);
+  stageAtEl.value = "0";
+  showFrame(0);
+}
+
+function showFrame(i) {
+  const frame = FRAMES[i] || {};
+  const before = (FRAMES[i - 1] || {}).cells || {};
+  const cells = frame.cells || {};
+  document.getElementById("stage-label").textContent =
+    (i + 1) + " / " + FRAMES.length + (frame.label ? " · " + frame.label : "");
+  document.getElementById("stage-body").innerHTML = Object.keys(cells).map((k) => {
+    // Nothing "changed" on the first frame — there is no previous state to
+    // differ from, and lighting up every cell at step 1 hides the one that
+    // moves at step 2.
+    const changed = i > 0 && String(before[k]) !== String(cells[k]);
+    return `<div class="cell${changed ? " changed" : ""}">`
+      + `<span>${escapeHtml(k)}</span><b>${escapeHtml(cells[k])}</b></div>`;
+  }).join("");
+  document.getElementById("stage-note").textContent = frame.note || "";
+}
+
+function stepStage(by) {
+  const next = Math.max(0, Math.min(FRAMES.length - 1, Number(stageAtEl.value) + by));
+  stageAtEl.value = String(next);
+  showFrame(next);
+}
+
+stageAtEl.oninput = () => showFrame(Number(stageAtEl.value));
+document.getElementById("stage-prev").onclick = () => stepStage(-1);
+document.getElementById("stage-next").onclick = () => stepStage(1);
 
 // ── Gate 2 of 3: the justification is submitted. Gate 3 is the judgment. ─────
 // This records the answer; it does NOT mark the concept earned. Only the
@@ -439,6 +600,9 @@ document.getElementById("submit-reason").onclick = async () => {
     check_passed: passed,
     check_type: "sandbox",   // never conflate with a repository check
     answer,
+    // What they said BEFORE running it, empty if they skipped. Judged with the
+    // answer, never instead of it.
+    prediction: predictEl.value.trim(),
   });
 
   if (res.ok) {
@@ -465,6 +629,7 @@ document.getElementById("submit-reason").onclick = async () => {
   document.getElementById("copy-token").onclick = async () => {
     const token = buildFallbackToken("justification", {
       concept: document.title, check_passed: passed, check_type: "sandbox", answer,
+      prediction: predictEl.value.trim(),
     });
     try {
       await navigator.clipboard.writeText(token);
@@ -480,10 +645,24 @@ document.getElementById("submit-reason").onclick = async () => {
 <!-- ═══════════════════════════════════════════════════════════════════════════
      AUTHORING NOTES (for whoever writes this tutorial, not rendered)
 
-     1. The concept must be expressible in JS. Rate limiting, retry backoff,
-        queues, state machines, parsers, diffing — yes. GC tuning, goroutine
-        scheduling, SQL planner behaviour — no. If it cannot be modelled, it
-        needs a repository check, not a sandbox.
+     1. The concept must be MODELLABLE in JS — which is not the same as the
+        user writing JS. Rate limiting, retry backoff, queues, state machines,
+        parsers, diffing — yes. GC tuning, goroutine scheduling, SQL planner
+        behaviour — no. If it cannot be modelled, it needs a repository check,
+        not a sandbox.
+
+        With IS_SOURCE_TEXT the textarea holds whatever the check can interpret,
+        so the exercise language and the check language come apart: the user
+        writes six instructions of assembly and the check runs them on a VM you
+        wrote in JS. The test is still whether a JS model can decide pass or
+        fail, and it is still a SANDBOX pass either way.
+
+     1b. Frames earn their place when the mechanism is a SEQUENCE the user
+        cannot hold in their head — a register file per instruction, a bucket
+        refilling per tick, a parser stack per token. A frame per step of
+        something already obvious from the result is decoration, and
+        decoration is what makes the one tutorial that needed a trace look
+        like all the others.
 
      2. The check must test behaviour across boundary cases. Source-grepping
         checks are gameable and measure nothing.
