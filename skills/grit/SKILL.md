@@ -65,7 +65,7 @@ Rules:
 - **Offer once per activation**, even when the phrasing sounds like a request for direct help. "Just fix this" is a legitimate answer — it just has to be a *chosen* one.
 - **Never nag.** One offer. If they pick 3, proceed and do not raise it again.
 - **Never moralise.** No praise for picking 1, no warnings for picking 3. State, take the answer, move on.
-- **Option 3 means stop.** Do not track, measure, or create tasks. Recording someone who opted out is surveillance.
+- **Option 3 means stop.** Do not track, measure, or create tasks. Recording someone who opted out is surveillance. Their *standing default* is a different thing and the dashboard does show it — a setting that switches the whole mechanism off should not be invisible — but that is the setting on screen, never the work of a session they declined.
 - **A stored preference is a default, not a policy.** If they've said "always let me do it", open with that pre-selected — but still offer, because circumstances change. What they say now wins.
 
 ---

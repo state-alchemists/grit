@@ -29,7 +29,7 @@ D is the mechanism ADR 0011 exists to eliminate. B is foreclosed by the browser.
 ## Rationale
 
 - **A daemon makes the write authenticated.** The page receives a single-use token minted at launch and scoped to one concept. A hand-edited `ledger.json` therefore *can* claim a pass — the daemon cannot stop someone editing its own file — but the daemon can tell whether a write came through the session it issued, and record that. Integrity becomes observable rather than assumed.
-- **The daemon is also required for local inference** (Design §8). The battery and probes run against a local model; the daemon is the natural host. This is not new infrastructure invented for reporting — it is the component the privacy boundary already implied.
+- **The daemon is also required for local inference** ([DESIGN.md §3](../DESIGN.md)). The battery and probes run against a local model; the daemon is the natural host. This is not new infrastructure invented for reporting — it is the component the privacy boundary already implied.
 - **Three gates, because the check alone cannot distinguish knowing from guessing.** A user can iterate until green without understanding the concept. The justification is what separates them, and ADR 0002 already places feedback *after* the check — so the judgment is where it was always going to be.
 - **The judgment gate is a measurement, so it is not delegated.** The user may configure the product; the user may not certify their own proficiency (ADR 0011). "I understood it" is the self-report that gate exists to replace.
 
@@ -47,7 +47,7 @@ D is the mechanism ADR 0011 exists to eliminate. B is foreclosed by the browser.
 - **Negative**: **`grit serve` is now a required component**, and the product is no longer a pure skill with no running process. The template remains offline for *working*; the daemon is needed only for *reporting*. Still a real cost, and it contradicts the earlier "self-contained" framing of ADR 0004 — that framing applied to the tutorial artifact, not the system.
 - **Negative**: **the tutorials directory starts empty and the daemon ships nothing to fill it.** First-run experience is an empty index and a copy-paste instruction. This is a direct tension with ADR 0003 (no lesson library): the runtime is demonstrable only once a tutorial has been written, which means a new user cannot evaluate it until the assistant authors one for them.
 - **Negative**: the judgment gate makes the assistant an **examiner**, and a wrong judgment either blocks a competent user or passes an incompetent one. Judging free-text answers for soundness is the least reliable thing in this design, and it is now load-bearing.
-- **Negative**: the judgment is a model output with no ground truth. Unlike the sandbox check, there is nothing to verify it against — the same limitation that weakens ungrounded mode (Design §5).
+- **Negative**: the judgment is a model output with no ground truth. Unlike the sandbox check, there is nothing to verify it against — the same limitation that weakens ungrounded mode ([DESIGN.md §2](../DESIGN.md)).
 - **Follow-ups**: the judgment must be **calibrated against the user's later performance** — if judgments marked sound correlate with later failure on the same concept, the examiner is wrong, and that is measurable. This belongs in Q1.
 - **Follow-ups**: the clipboard fallback should ship, so the daemon is an optimisation rather than a hard dependency.
 

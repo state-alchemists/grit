@@ -98,6 +98,7 @@ def main() -> None:
             lambda: _property_preferences_round_trip(fx),
             lambda: _property_pending_survives_restart(fx, root),
             lambda: _property_stale_pending_shows_its_age(fx, root),
+            lambda: _property_mechanism_off_is_visible(fx, root),
         ]
         for check in properties:
             check()
@@ -220,6 +221,27 @@ def _property_gate_three_appends(fx: Fixture) -> None:
     ]
     assert rows, "the standing verdict must be the one in the ledger"
     assert rows[0]["earned"] is False
+
+
+def _property_mechanism_off_is_visible(fx: Fixture, root: str) -> None:
+    # `visible_overrides` and `default_do_it_myself` sat in DEFAULT_PREFS for
+    # weeks with nothing reading, writing or rendering either, so DESIGN's
+    # "a preference that turns the mechanism off is recorded and shown" was
+    # a key and a sentence. A setting that disables the only function the
+    # product has must reach the page, or the product looks fine while doing
+    # nothing — which is the exact failure it exists to treat.
+    assert not _get(fx.base, "/status")["notices"], "a default setup has nothing to report"
+    _post(fx.base, "/preferences", {"default_do_it_myself": False})
+    kinds = [n["kind"] for n in _get(fx.base, "/status")["notices"]]
+    assert "mechanism-off" in kinds, "opting out by default must be visible: %s" % kinds
+
+    # Opting out is a *setting*, not a measurement. Showing it must not start
+    # recording the user — that half was never the disagreement.
+    evidence = os.path.join(root, "evidence.jsonl")
+    before = os.path.getsize(evidence) if os.path.exists(evidence) else 0
+    _get(fx.base, "/status")
+    after = os.path.getsize(evidence) if os.path.exists(evidence) else 0
+    assert before == after, "reporting the setting must not write evidence"
 
 
 def _property_port_is_published(fx: Fixture) -> None:
