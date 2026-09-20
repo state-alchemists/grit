@@ -328,10 +328,17 @@ uninstall_from() {
         run rm -rf "${dest}"
         log "  removed grit"
     else
-        log "  nothing to remove"
+        log "  no skill to remove"
     fi
-    hook_dest_dir "${id}" >/dev/null 2>&1 && wire_hook "${id}" remove
-    run rmdir "${target}" 2>/dev/null || true
+    if hook_dest_dir "${id}" >/dev/null 2>&1; then
+        wire_hook "${id}" remove
+        log "  unregistered the ${id} hook"
+    fi
+    # `<dotdir>/skills` is the runtime's directory, not ours, and it may hold
+    # skills from elsewhere. We do not delete it — an empty directory left
+    # behind costs nothing, and this used to run even when nothing had been
+    # removed, so uninstalling a grit that was never installed could take out
+    # a skills directory the user had made for something else.
 }
 
 for id in "${TOOL_IDS[@]}"; do
@@ -374,6 +381,26 @@ if [[ "${uninstall}" -eq 0 && "${dry_run}" -eq 0 ]]; then
 fi
 
 log "Done."
+
+# ---------------------------------------------------------------------------
+# What an uninstall deliberately does NOT take with it. Saying so is the point:
+# the profile is the product, the remedy for a wrong record is a new
+# measurement rather than a deletion, and a user who wants it gone should be
+# told how rather than left to guess whether it is still there.
+# ---------------------------------------------------------------------------
+if [[ "${uninstall}" -eq 1 && "${dry_run}" -eq 0 ]]; then
+    echo
+    log "Left untouched, on purpose:"
+    log "  ~/.grit — your evidence, ledger and authorship records"
+    log "           Uninstalling is not how you correct a record. Delete it"
+    log "           yourself if you want it gone:  rm -rf ~/.grit"
+    if [[ -f "${HOME}/.grit/daemon.json" ]]; then
+        log "  a dashboard daemon may still be listening — stop it with:"
+        log "           python3 ${SKILL_SRC}/serve.py --root ~/.grit --stop"
+    fi
+    log "  any project-scoped install made with --here. This pass only touched"
+    log "           the targets under ~. Find the rest with:  bin/install.sh --doctor"
+fi
 
 if [[ "${uninstall}" -eq 0 && "${dry_run}" -eq 0 ]]; then
     cat <<EOF

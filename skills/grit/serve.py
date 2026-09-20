@@ -775,6 +775,7 @@ class State:
             session.gates["justification"] = JustificationGate(
                 answer=(payload.get("answer") or "").strip(),
                 at=_get_timestamp(),
+                prediction=(payload.get("prediction") or "").strip(),
             ).to_dict()
             return "awaiting-judgment", None
         return "", "unknown-gate:" + gate
@@ -1145,13 +1146,22 @@ class CheckGate:
 
 @dataclass(frozen=True)
 class JustificationGate:
-    """Gate 2. The free-text answer gate 3 judges."""
+    """Gate 2. The free-text answer gate 3 judges.
+
+    `prediction` is what the user said would happen BEFORE they ran the check,
+    captured by the page and empty when they skipped it. It is judged alongside
+    the answer and never instead of it: a justification written after a pass is
+    unfalsifiable on its own, and a prediction that missed followed by a
+    confident explanation of why it was always going to work is the exact
+    after-the-fact story the judging rules ask for.
+    """
 
     answer: str
     at: str = ""
+    prediction: str = ""
 
     def to_dict(self) -> dict[str, str]:
-        return {"answer": self.answer, "at": self.at}
+        return {"answer": self.answer, "at": self.at, "prediction": self.prediction}
 
 
 

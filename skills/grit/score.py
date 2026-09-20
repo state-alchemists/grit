@@ -134,6 +134,7 @@ class ConceptScore:
     unaided_tasks: int
     projects: int
     blocked_by: Optional[str] = None
+    decays_in_days: Optional[int] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -145,6 +146,7 @@ class ConceptScore:
             "unaided_tasks": self.unaided_tasks,
             "projects": self.projects,
             "blocked_by": self.blocked_by,
+            "decays_in_days": self.decays_in_days,
         }
 
 
@@ -410,6 +412,7 @@ class _Tally:
     given: dict[TaskKey, float] = field(default_factory=dict)
     unaided_tasks: set[TaskKey] = field(default_factory=set)
     projects: set[str] = field(default_factory=set)
+    ages: list[int] = field(default_factory=list)
 
 
 def _fold_event(t: _Tally, ev: EvidenceRow, now: Optional[datetime]) -> None:
@@ -421,6 +424,7 @@ def _fold_event(t: _Tally, ev: EvidenceRow, now: Optional[datetime]) -> None:
         t.total = max(0.0, t.total - 0.25)
         return
     t.passes += 1
+    t.ages.append(_age_days(ev.at, now))
     if ev.project:
         t.projects.add(ev.project)
     key = compose_task_key(ev.source, ev.project, ev.task)
@@ -493,6 +497,7 @@ def _tally_to_score(t: _Tally) -> ConceptScore:
         unaided_tasks=len(t.unaided_tasks),
         projects=len(t.projects),
         blocked_by=_get_blocked_reason(level, total, enough_unaided, len(t.unaided_tasks)),
+        decays_in_days=_get_days_until_decay(t.ages),
     )
 
 
@@ -507,18 +512,40 @@ def _level_for(total: float, enough_unaided: bool) -> Level:
 def _get_blocked_reason(
     level: Level, total: float, enough_unaided: bool, unaided_count: int
 ) -> Optional[str]:
-    """Why this concept is not `proven`, in the user's terms — or None when it
-    already is."""
+    """What this concept still needs to reach `proven`, in the user's terms —
+    or None when it already is.
+
+    Every unproven concept gets a sentence. This returned None for the case
+    where no unaided repository work exists yet, which is the state every
+    concept starts in and the one where the user most needs telling what
+    actually counts — so the most common card on the dashboard was the one
+    that said nothing.
+    """
     if level == "proven":
         return None
-    if total >= PROVEN_AT and not enough_unaided:
-        return (
-            "needs %d distinct unaided tasks in a real repository "
-            "(you have %d)" % (PROVEN_NEEDS_UNAIDED_TASKS, unaided_count)
+    short = PROVEN_NEEDS_UNAIDED_TASKS - unaided_count
+    if short <= 0:
+        return "needs more evidence — %.2f of the %.2f that proves it" % (
+            total,
+            PROVEN_AT,
         )
-    if enough_unaided:
-        return "needs more evidence"
-    return None
+    if unaided_count:
+        return "needs %d more unaided task%s in a real repository" % (
+            short, "" if short == 1 else "s",
+        )
+    return "needs %d distinct unaided tasks in a real repository" % short
+
+
+def _get_days_until_decay(ages: list[int]) -> Optional[int]:
+    """Days until the oldest evidence still at full weight halves.
+
+    The score is allowed to go down, and ageing is the only way it does so
+    without the user failing anything — which makes it the one movement they
+    cannot otherwise see coming. None when there is nothing left to decay:
+    no evidence, or all of it already stale.
+    """
+    fresh = [a for a in ages if a <= STALE_DAYS]
+    return STALE_DAYS - max(fresh) if fresh else None
 
 
 def get_evidence_path(root: str) -> str:
@@ -555,11 +582,12 @@ def _demo() -> None:
     _check_proven_needs_two_unaided(ev, now)
     _check_repetition_is_capped(ev, now)
     _check_failures_and_age(ev, now)
+    _check_unproven_always_names_its_next_step(ev, now)
     _check_task_identity(ev, now)
     _check_near_duplicate_detection()
     _check_failed_flag_reaches_the_file()
     _check_worked_examples_match_the_model(ev, now)
-    print("ok — 19 scoring properties hold")
+    print("ok — 21 scoring properties hold")
 
 
 def _check_worked_examples_match_the_model(ev: Ev, now: datetime) -> None:
@@ -668,6 +696,35 @@ def _check_failures_and_age(ev: Ev, now: datetime) -> None:
         [ev("repo", "none", "t1", at="2020-01-01T00:00:00+00:00")], now
     )
     assert stale.score < fresh.score, (fresh, stale)
+
+    # The decay clock counts down the evidence that is still at full weight.
+    # Evidence already past STALE_DAYS has nothing left to lose, so it must not
+    # report a negative countdown — a card reading "decays in -1,847 days" is
+    # how a derived field announces that nobody computed its empty case.
+    assert fresh.decays_in_days == STALE_DAYS - 1, fresh
+    assert stale.decays_in_days is None, stale
+    assert score_concept([], now).decays_in_days is None
+
+
+def _check_unproven_always_names_its_next_step(ev: Ev, now: datetime) -> None:
+    """A concept that is not `proven` must say what would prove it.
+
+    The no-unaided-work case returned None, so the card every concept starts
+    life as — and the only one whose owner does not already know the answer —
+    was the single card on the dashboard with no next step written on it.
+    """
+    for rows in (
+        [],
+        [ev("sandbox", "none", "t1")],
+        [ev("repo", "none", "t1")],
+        [ev("repo", "full", "t1")],
+        [ev("repo", "none", "t1"), ev("repo", "none", "t2"), ev("repo", "none", "t3", failed=True)],
+    ):
+        got = score_concept(rows, now)
+        if got.level == "proven":
+            assert got.blocked_by is None, got
+        else:
+            assert got.blocked_by, "an unproven concept said nothing: %s" % (got,)
 
 
 def _check_task_identity(ev: Ev, now: datetime) -> None:

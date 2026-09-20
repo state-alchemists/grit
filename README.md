@@ -46,6 +46,34 @@ flowchart TD
 
 **You do not have to be trusted for any of this.** The hook observes every byte the assistant writes, so the `assistance` coefficient is measured rather than declared. If the AI wrote it, the concept earns zero whatever anyone intended.
 
+## How to use it
+
+Install it, and then mostly forget it — the hook raises the offer the first time the assistant reaches for your editor in a session, once, and never again that session. Everything below is for when you want to drive rather than be asked.
+
+**Ask for the work, and say you want it.** There is no command for this. Plain words in the middle of ordinary work:
+
+> *let's add the retry backoff — I'll write it myself*
+
+The assistant names the concepts it thinks that exercises, you correct them (they are your names, not its), you write the code, your test decides, and it checks the git history to see who actually typed it. Say *just do it* instead and it will, and nothing is scored. That is a legitimate answer, and it only has to be a chosen one.
+
+**Learn something you have never touched.** You do not need a repository, only something a check can decide:
+
+> *I want to learn assembly — I have no experience*
+
+You get an ordered list of concepts and **one** exercise written against the first, with a real check. Not a twelve-part course: each exercise is written by hand when you reach it. Exercises top out at `recall` no matter how many you do — `proven` needs two distinct unaided tasks in a real repository, because nothing else shows you can do it in your own stack.
+
+Ask for something with no oracle — *teach me project management* — and it will decline, say why, and then just help you normally, untracked. It cannot check it, so it will not pretend to measure it.
+
+**See where you stand.**
+
+> `/grit`
+
+Reports whether the hook is actually registered on this machine, what the assistant has written in this project, and the dashboard link. It does not start anything.
+
+**Correct a record you think is wrong.** You cannot, and that is the design. There is no edit, no override, no "actually I did know that." The remedy is another measurement: do another task. This applies when the assistant got it wrong too — that is the exact case an audit trail exists for.
+
+**Turn it off.** `GRIT_OFF=1` everywhere, `python3 hooks/grit-hook.py --off` in one project, or `"ask_on_first_edit": false` in `~/.grit/preferences.json` to keep the recording and drop the prompt.
+
 ## The score
 
 `credit = source_weight × assistance × novelty`, summed per concept and capped at 1.0.
@@ -73,7 +101,7 @@ The dashboard is the entry gate, not a status page ([ADR 0001](.sdlc/docs/adr/00
 
 Six themes — **Dungeon** (torchlit amber), **Terminal** (green phosphor and scanlines), **Synthwave** (neon magenta and cyan), **Forest** (moss and bark), **Arcade** (high contrast), **Paper** (light and printed). Animations can be turned off. The choice is stored in `~/.grit/preferences.json` and changeable any time from **Settings**.
 
-It reads as a game — rank badges, concept cards, a proficiency panel — and it deliberately has **no XP, no streaks, and nothing to grind.** There is a score, but it is *derived* from evidence rather than accumulated, recomputed on every read, and it can go *down*. A number you add to is a number you can farm, and a farmed record proves nothing.
+Concepts are ordered by what needs work rather than alphabetically, every card that is not `proven` says in one sentence what would prove it, and a card whose evidence is about to start ageing says how long it has. It reads as a game — rank badges, concept cards, a proficiency panel — and it deliberately has **no XP, no streaks, and nothing to grind.** There is a score, but it is *derived* from evidence rather than accumulated, recomputed on every read, and it can go *down*. A number you add to is a number you can farm, and a farmed record proves nothing.
 
 ```bash
 python3 skills/grit/serve.py --root ~/.grit     # prints its URL; also written to ~/.grit/daemon.json
@@ -111,6 +139,8 @@ The hook needs a `PreToolUse` mechanism, which only some runtimes have:
 | everything else | — | skill works; no prompt, and authorship is `UNVERIFIED` |
 
 Both are merged, not overwritten — existing hooks and settings are preserved, and a backup is taken first. The installer says plainly which targets got no hook rather than pretending they did.
+
+**Uninstall removes grit and nothing else.** It takes out the skill directory and its hook registration, leaves every other skill in that folder alone, leaves the runtime's own `skills/` directory in place, and leaves the rest of your `settings.json` exactly as it was — the file is only deleted when grit's hook was the one thing in it. **`~/.grit` survives on purpose.** Uninstalling is not how you correct a record; if you want the profile gone, `rm -rf ~/.grit` is yours to run, and the installer says so rather than leaving you to guess.
 
 > zrb also reads `~/.claude/settings.json` for Claude compatibility, so on a machine with both, one edit reaches the hook twice. The hook de-duplicates inside a 2-second window, so authorship is still counted once — the same guard covers a user-level and project-level install both firing.
 
@@ -168,9 +198,9 @@ python3 skills/grit/serve.py --root ~/.grit --stop     # stop it
 Open the URL it prints. You will get the onboarding gate and a dashboard with **nothing in it**, which is the honest state — see below for why.
 
 ```bash
-python3 skills/grit/test_serve.py    # 14 integrity properties
+python3 skills/grit/test_serve.py    # 15 integrity properties
 python3 hooks/test_hook.py           # 20 hook properties
-python3 skills/grit/score.py selftest  # 19 scoring properties
+python3 skills/grit/score.py selftest  # 21 scoring properties
 python3 bin/test_study_report.py     # 5 study_report properties
 python3 bin/check_docs.py            # every factual claim in these docs
 ```
@@ -227,6 +257,8 @@ Read that as: the measurement substrate is built and both evidence sources work;
 - **Acceptance checks** — command/test; a task scores on a pass, not on your say-so *(built)*
 - **Dashboard** — authorship, proficiency, six themes, auto-refresh *(built)*
 - **Tutorials as a second evidence source** — the runtime and the authoring path both work *(built)*; **no automation around them**
+- **Tutorials can trace, and need not be JavaScript** — a check can return a step-through the page renders (registers per instruction, a bucket per tick), and can take the textarea as raw source so the exercise is assembly or a query while the check stays JS *(built)*
+- **Predict before you run** — the page asks what you expect, locks it when you run, and hands it to the assistant with your justification. A prediction that missed followed by a confident explanation is the one thing a written-afterwards answer cannot hide *(built)*
 
 **Not in v1:** team or hosted features, non-coding domains, cross-user benchmarking, a tutorial library, and any claim beyond harm avoidance.
 
