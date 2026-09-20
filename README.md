@@ -8,7 +8,7 @@ Learning lives at the person level (`~/.grit/`), not per project, and surfaces a
 
 The name is the thesis: grit is the opposite of friction-avoidance.
 
-> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. The second evidence source works too: the assistant writes a tutorial against a measured gap and completing it scores. What does not exist is any **automation** of that — no library, no cache across machines, no pre-flight validation. The design is specified in [docs/DESIGN.md](docs/DESIGN.md); the reasoning and rejected alternatives are in [docs/adr/](docs/adr/README.md). **Read [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything** — it names the assumption that everything else rests on.
+> **Status: the scoring loop works end to end from real repository work.** Do a task yourself, pass its check, and the concept gains a level you did not award yourself. The second evidence source works too: the assistant writes a tutorial against a measured gap and completing it scores. What does not exist is any **automation** of that — no library, no cache across machines, no pre-flight validation. The design is specified in [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md); the reasoning and rejected alternatives are in [.sdlc/docs/adr/](.sdlc/docs/adr/README.md). **Read [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything** — it names the assumption that everything else rests on.
 
 ---
 
@@ -65,11 +65,11 @@ flowchart TD
 + a 2nd distinct unaided task    1.00  proven
 ```
 
-Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0009](docs/adr/0009-graded-score-from-capped-evidence.md).
+Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0009](.sdlc/docs/adr/0009-graded-score-from-capped-evidence.md).
 
 ## The dashboard
 
-The dashboard is the entry gate, not a status page ([ADR 0001](docs/adr/0001-measure-the-effect.md)). It opens on first run, asks what to call you and which theme you want, and applies each theme live as you click it.
+The dashboard is the entry gate, not a status page ([ADR 0001](.sdlc/docs/adr/0001-measure-the-effect.md)). It opens on first run, asks what to call you and which theme you want, and applies each theme live as you click it.
 
 Six themes — **Dungeon** (torchlit amber), **Terminal** (green phosphor and scanlines), **Synthwave** (neon magenta and cyan), **Forest** (moss and bark), **Arcade** (high contrast), **Paper** (light and printed). Animations can be turned off. The choice is stored in `~/.grit/preferences.json` and changeable any time from **Settings**.
 
@@ -196,20 +196,20 @@ concept level  ←  evidence.jsonl  ←  a repository task you did unaided   ✅
 | Tutorial runtime, and tutorials written on demand | **works** — verified end to end |
 | Onboarding battery, router | **do not exist** — and ADR 0009 removed the need for them to exist first |
 
-Read that as: the measurement substrate is built and both evidence sources work; what is thin is everything around the second one. The remaining build work is automation — batching, caching and validating tutorials rather than writing each by hand. The remaining *risk* is validity — nothing has tested whether a `proven` concept predicts real capability, which is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md)'s question, restated for a scored profile rather than a battery.
+Read that as: the measurement substrate is built and both evidence sources work; what is thin is everything around the second one. The remaining build work is automation — batching, caching and validating tutorials rather than writing each by hand. The remaining *risk* is validity — nothing has tested whether a `proven` concept predicts real capability, which is [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md)'s question, restated for a scored profile rather than a battery.
 
 ## Documentation
 
 | Path | What it is |
 |------|-----------|
 | [AGENTS.md](AGENTS.md) | **Conventions for working here** — the ones you cannot infer from the code |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **How it works** — the three processes, the files, the invariants |
-| [docs/DESIGN.md](docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, the privacy boundary, what is unproven |
-| [docs/adr/](docs/adr/README.md) | **Decision records** — why the design is this way, and what was rejected |
-| [docs/LANDSCAPE.md](docs/LANDSCAPE.md) | Competing products, supporting evidence in tiers, the gaps |
-| [docs/USAGE.md](docs/USAGE.md) | Historical: a worked example of the original flow (superseded) |
-| [ADR 0008](docs/adr/0008-dashboard-polls-files-it-does-not-push.md) | **The data path**, as a diagram — onboarding → day-to-day → dashboard |
-| [docs/dev-fixtures.md](docs/dev-fixtures.md) | Props for exercising the runtime — not user instructions |
+| [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md) | **How it works** — the three processes, the files, the invariants |
+| [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, the privacy boundary, what is unproven |
+| [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) | **Decision records** — why the design is this way, and what was rejected |
+| [.sdlc/docs/LANDSCAPE.md](.sdlc/docs/LANDSCAPE.md) | Competing products, supporting evidence in tiers, the gaps |
+| [.sdlc/docs/USAGE.md](.sdlc/docs/USAGE.md) | Historical: a worked example of the original flow (superseded) |
+| [ADR 0008](.sdlc/docs/adr/0008-dashboard-polls-files-it-does-not-push.md) | **The data path**, as a diagram — onboarding → day-to-day → dashboard |
+| [.sdlc/docs/dev-fixtures.md](.sdlc/docs/dev-fixtures.md) | Props for exercising the runtime — not user instructions |
 | [bin/install.sh](bin/install.sh) | Multi-runtime installer — zrb, Claude Code, and 29 more |
 | [hooks/](hooks/) | The `PreToolUse` hook and its self-check |
 | `bin/install.sh --doctor` | Finds broken or unguarded hook registrations anywhere on the machine |
@@ -235,7 +235,7 @@ Read that as: the measurement substrate is built and both evidence sources work;
 
 **The honest claim.** This design may **avoid harm**. It does not claim to make anyone more skilled. Bastani et al.'s guardrailed arm was statistically indistinguishable from control — not better. No study shows a tool producing skill *gains* over working unaided.
 
-**The unproven assumption.** Everything depends on the profile predicting real-work proficiency. If a `proven` concept does not, the levels are noise and the design collapses to a mirror. This is [ADR 0012](docs/adr/0012-profile-validity-is-the-critical-path.md), which was written about the onboarding battery and has been restated against the score that replaced it. The instrument changed; the question did not.
+**The unproven assumption.** Everything depends on the profile predicting real-work proficiency. If a `proven` concept does not, the levels are noise and the design collapses to a mirror. This is [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md), which was written about the onboarding battery and has been restated against the score that replaced it. The instrument changed; the question did not.
 
 ---
 

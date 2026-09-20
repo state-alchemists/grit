@@ -28,6 +28,11 @@ SKILL = ROOT / "skills" / "grit"
 # Historical by declaration: a worked example of a flow that no longer exists.
 HISTORICAL = {"USAGE.md"}
 
+# Vendored by the sdlc-* skills: a path catalogue and fill-in templates that
+# describe what those skills would generate, not what this repository has. Their
+# unfilled `{{placeholders}}` and forward references are not claims about grit.
+VENDORED = ("CONVENTIONS.md", ".sdlc/templates/")
+
 # (kind, where, message) — `where` is a path or a label, always stringified.
 Finding = tuple[str, str, str]
 findings: list[Finding] = []
@@ -40,7 +45,10 @@ def add(kind: str, where: Any, msg: str) -> None:
 def live_docs() -> Iterator[tuple[pathlib.Path, str]]:
     """Every doc that is meant to describe the product as it is today."""
     for p in sorted(ROOT.rglob("*.md")):
+        rel = p.relative_to(ROOT).as_posix()
         if ".git" in p.parts or p.name in HISTORICAL:
+            continue
+        if any(v in rel for v in VENDORED):
             continue
         text = p.read_text(encoding="utf-8")
         if re.search(r"\*\*Status\*\*:\s*\*?\*?Superseded", text):
@@ -54,7 +62,7 @@ def live_docs() -> Iterator[tuple[pathlib.Path, str]]:
 def check_paths(serve: str, score: str) -> None:
     """§1 Repo paths in backticks must exist; §1b markdown links must resolve."""
     path_re = re.compile(
-        r"`((?:skills|hooks|bin|docs|tests)/[\w./-]+"
+        r"`((?:\.sdlc|skills|hooks|bin|docs|tests)/[\w./-]+"
         r"\.(?:py|html|sh|json|jsonl|md))`"
     )
     for p, text in live_docs():
@@ -277,7 +285,7 @@ def check_adr_citations() -> None:
     sweep never looked at. Code cites ADRs too, and a citation to a number
     nobody has is worse than none — it sends a reader hunting for a file.
     """
-    live_adrs = {f.name[:4] for f in (ROOT / "docs" / "adr").glob("0*.md")}
+    live_adrs = {f.name[:4] for f in (ROOT / ".sdlc" / "docs" / "adr").glob("0*.md")}
     sources = [p_ for p_ in ROOT.rglob("*.py") if ".git" not in p_.parts]
     sources += [ROOT / "bin" / "install.sh"]
     sources += [p_ for p_, _ in live_docs()]
@@ -293,7 +301,7 @@ def check_adr_citations() -> None:
 
 def check_adr_index() -> None:
     """§9 ADR index statuses must match the ADR files."""
-    index = ROOT / "docs" / "adr" / "README.md"
+    index = ROOT / ".sdlc" / "docs" / "adr" / "README.md"
     if not index.exists():
         return
     norm: Callable[[str], str] = lambda x: re.sub(r"[^a-z0-9]", "", x.lower())
