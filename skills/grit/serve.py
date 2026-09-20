@@ -50,7 +50,7 @@ JUDGMENTS: tuple[JudgmentVerdict, ...] = ("sound", "unsound", "pending")
 # Default only. Override with --port or GRIT_PORT; --port 0 takes any free port.
 # Whatever is actually bound gets written to <root>/daemon.json, and everything
 # downstream reads that rather than assuming this number.
-DEFAULT_PORT: int = int(os.environ.get("GRIT_PORT", 7801))
+DEFAULT_PORT: int = int(os.environ.get("GRIT_PORT", 4748))  # GRIT on a phone keypad
 
 # ── Dashboard themes (chosen at onboarding) ──────────────────────────────────
 # Names only; the palettes live in dashboard.html. Kept here so the daemon can

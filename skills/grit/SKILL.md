@@ -228,8 +228,8 @@ Three properties that must survive every edit:
 `serve.py`, in this skill's directory, owns the tutorial session and the record. Start it when a tutorial needs delivering:
 
 ```sh
-python3 <skill-dir>/serve.py --root ~/.grit    # default port 7801
-python3 <skill-dir>/serve.py --port 0          # any free port, if 7801 is taken
+python3 <skill-dir>/serve.py --root ~/.grit    # default port 4748
+python3 <skill-dir>/serve.py --port 0          # any free port, if 4748 is taken
 ```
 
 **Never assume the port.** The daemon writes its real address to `~/.grit/daemon.json` on startup. Read the `url` field out of that file before building any request or telling the user where to look — `cat ~/.grit/daemon.json` and take `url` verbatim.
