@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Conventions for working in this repository that you **cannot get by reading the code**. Everything inferable from the source is deliberately absent — for what the product is read [README.md](README.md), for how it works read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), for why it is shaped this way read [docs/adr/](docs/adr/README.md).
+Conventions for working in this repository that you **cannot get by reading the code**. Everything inferable from the source is deliberately absent — for what the product is read [README.md](README.md), for how it works read [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md), for why it is shaped this way read [.sdlc/docs/adr/](.sdlc/docs/adr/README.md).
 
 ---
 
@@ -73,14 +73,17 @@ New tests follow the same shape. A test here is a **property**, named for what b
 
 | Layer | Owner |
 |---|---|
+| Conventions for working here | [AGENTS.md](AGENTS.md) |
 | What it is, how to install | [README.md](README.md) |
-| The mechanism — processes, files, data path, invariants | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| The principles and what is unproven | [docs/DESIGN.md](docs/DESIGN.md) |
-| Individual decisions and rejected options | [docs/adr/](docs/adr/README.md) |
+| The mechanism — processes, files, data path, invariants | [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md) |
+| The principles and what is unproven | [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) |
+| Individual decisions and rejected options | [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) |
 | What the assistant does at runtime | [skills/grit/SKILL.md](skills/grit/SKILL.md) |
-| Props that look like features but are not | [docs/dev-fixtures.md](docs/dev-fixtures.md) |
+| Props that look like features but are not | [.sdlc/docs/dev-fixtures.md](.sdlc/docs/dev-fixtures.md) |
 
 Before adding a document, find the one that already owns that layer. `ARCHITECTURE.md` exists because `DESIGN.md` had drifted into documenting files no code wrote — `profile.json`, `tasks.json`, `checks/`, `missions/` — while never mentioning the two that carried all the real data.
+
+**Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead.
 
 **A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes: paths, links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR existence**, and ADR statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
 
@@ -90,7 +93,7 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 - **Numbers run in reading order, not chronological order.** All of it was decided in one pass, so chronology carries no information and a number that tells you where to start does.
 - **A superseded decision does not keep its own file.** Fold it into the ADR that replaced it, as a rejected alternative stating why it failed and what survived. Then delete it. Reasoning is only useful next to the decision that overruled it, and git keeps the original.
-- **Deferred is not superseded.** [ADR 0011](docs/adr/0011-routing-on-a-measured-profile-deferred.md) describes a router and a battery that nothing implements — it stays, in full, because deleting it invites someone to reinvent a design that was already argued down. Delete an ADR only when acting on it would now be *wrong*, never because it is unbuilt.
+- **Deferred is not superseded.** [ADR 0011](.sdlc/docs/adr/0011-routing-on-a-measured-profile-deferred.md) describes a router and a battery that nothing implements — it stays, in full, because deleting it invites someone to reinvent a design that was already argued down. Delete an ADR only when acting on it would now be *wrong*, never because it is unbuilt.
 - **Renumbering breaks citations in code too.** `.py` and `.sh` files cite ADRs. Class 8d of `check_docs.py` now catches a dead one.
 
 ---
@@ -101,7 +104,7 @@ This product argues that a record which can be edited proves nothing. That appli
 
 - **`~/.grit/evidence.jsonl` and the ledger are append-only.** The remedy for a wrong record is a new measurement, never an edit — including when the mistake was the assistant's. That is the exact case an audit trail exists for.
 - **`earned` is derived in one function and assigned nowhere.** Two code paths that both decide what a word means will eventually disagree, invisibly.
-- **A hook can never block a tool call.** Every registration carries `|| exit 0` — see [ADR 0007](docs/adr/0007-hooks-must-fail-open.md).
+- **A hook can never block a tool call.** Every registration carries `|| exit 0` — see [ADR 0007](.sdlc/docs/adr/0007-hooks-must-fail-open.md).
 - **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.
 
 ---

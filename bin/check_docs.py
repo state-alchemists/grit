@@ -54,7 +54,7 @@ def live_docs() -> Iterator[tuple[pathlib.Path, str]]:
 def check_paths(serve: str, score: str) -> None:
     """§1 Repo paths in backticks must exist; §1b markdown links must resolve."""
     path_re = re.compile(
-        r"`((?:skills|hooks|bin|docs|tests)/[\w./-]+"
+        r"`((?:\.sdlc|skills|hooks|bin|docs|tests)/[\w./-]+"
         r"\.(?:py|html|sh|json|jsonl|md))`"
     )
     for p, text in live_docs():
@@ -277,7 +277,7 @@ def check_adr_citations() -> None:
     sweep never looked at. Code cites ADRs too, and a citation to a number
     nobody has is worse than none — it sends a reader hunting for a file.
     """
-    live_adrs = {f.name[:4] for f in (ROOT / "docs" / "adr").glob("0*.md")}
+    live_adrs = {f.name[:4] for f in (ROOT / ".sdlc" / "docs" / "adr").glob("0*.md")}
     sources = [p_ for p_ in ROOT.rglob("*.py") if ".git" not in p_.parts]
     sources += [ROOT / "bin" / "install.sh"]
     sources += [p_ for p_, _ in live_docs()]
@@ -293,7 +293,7 @@ def check_adr_citations() -> None:
 
 def check_adr_index() -> None:
     """§9 ADR index statuses must match the ADR files."""
-    index = ROOT / "docs" / "adr" / "README.md"
+    index = ROOT / ".sdlc" / "docs" / "adr" / "README.md"
     if not index.exists():
         return
     norm: Callable[[str], str] = lambda x: re.sub(r"[^a-z0-9]", "", x.lower())

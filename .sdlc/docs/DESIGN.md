@@ -95,6 +95,6 @@ Stated here rather than left to be discovered.
 |---|---|
 | How does it work? | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Why is it shaped this way? | [adr/](adr/README.md) |
-| How do I install and use it? | [../README.md](../README.md) |
-| What does the assistant do? | [../skills/grit/SKILL.md](../skills/grit/SKILL.md) |
+| How do I install and use it? | [../../README.md](../../README.md) |
+| What does the assistant do? | [../../skills/grit/SKILL.md](../../skills/grit/SKILL.md) |
 | What is a prop, not a feature? | [dev-fixtures.md](dev-fixtures.md) |

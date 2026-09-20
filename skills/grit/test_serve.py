@@ -82,7 +82,7 @@ def main() -> None:
 
         # A list, so the printed count is the number of properties that ran.
         # It previously said 7 while calling 13 — and AGENTS.md, README.md and
-        # docs/dev-fixtures.md all quote that figure, so the drift was in four
+        # .sdlc/docs/dev-fixtures.md all quote that figure, so the drift was in four
         # places at once.
         properties = [
             lambda: _property_page_cannot_self_judge(fx),
