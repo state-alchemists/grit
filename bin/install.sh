@@ -382,7 +382,7 @@ Restart your assistant, then ask it "what's my grit standing?" — or just start
 work, and the hook offers you the choice the first time it reaches for an editor.
 
   Dashboard:  python3 ~/.claude/skills/grit/serve.py   (or any target's copy)
-              it prints its URL (default :7801) — first run asks you to pick a theme
+              it prints its URL (default :4748) — first run asks you to pick a theme
 
   Off switch: python3 hooks/grit-hook.py --off   from inside a project
               GRIT_OFF=1                         everywhere
