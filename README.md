@@ -112,6 +112,8 @@ The hook needs a `PreToolUse` mechanism, which only some runtimes have:
 
 Both are merged, not overwritten — existing hooks and settings are preserved, and a backup is taken first. The installer says plainly which targets got no hook rather than pretending they did.
 
+**Uninstall removes grit and nothing else.** It takes out the skill directory and its hook registration, leaves every other skill in that folder alone, leaves the runtime's own `skills/` directory in place, and leaves the rest of your `settings.json` exactly as it was — the file is only deleted when grit's hook was the one thing in it. **`~/.grit` survives on purpose.** Uninstalling is not how you correct a record; if you want the profile gone, `rm -rf ~/.grit` is yours to run, and the installer says so rather than leaving you to guess.
+
 > zrb also reads `~/.claude/settings.json` for Claude compatibility, so on a machine with both, one edit reaches the hook twice. The hook de-duplicates inside a 2-second window, so authorship is still counted once — the same guard covers a user-level and project-level install both firing.
 
 Manual install, if you prefer:
