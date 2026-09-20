@@ -356,12 +356,12 @@ const SESSION = window.GRIT_SESSION ||
 // Same origin when the daemon served this page — the normal path, and the only
 // one that works now that CORS is closed. For a file:// page opened by hand,
 // fall back to the address the daemon injected, then to ?daemon=, then to the
-// default port. Nothing here assumes 7801 is still true.
+// default port. Nothing here assumes 4748 is still true.
 const DAEMON =
   location.protocol.startsWith("http") ? ""
   : (window.GRIT_DAEMON
      || new URLSearchParams(location.search).get("daemon")
-     || "http://127.0.0.1:7801");
+     || "http://127.0.0.1:4748");
 
 async function report(event, payload) {
   if (!SESSION) return { ok: false, reason: "no-session" };

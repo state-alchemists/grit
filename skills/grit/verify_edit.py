@@ -38,7 +38,7 @@ from typing import Any, Literal, Optional
 HOME_ROOT = os.path.expanduser(os.environ.get("GRIT_ROOT", "~/.grit"))
 
 # The four verdicts this tool can reach. `UNVERIFIED` is deliberately distinct
-# from `HUMAN-WRITTEN`: an agent.md rule says never upgrade one to the other.
+# from `HUMAN-WRITTEN`: an AGENTS.md rule says never upgrade one to the other.
 Verdict = Literal[
     "HUMAN-WRITTEN",
     "ASSISTED",
@@ -49,13 +49,19 @@ Verdict = Literal[
 # without parsing prose.
 EXIT_UNCHANGED = 2
 EXIT_UNVERIFIED = 3
+# A failure to run is not a verdict, and must never share a code with one.
+# Every error path used to return 1 or 2 — ASSISTED and NOTHING CHANGED — so a
+# mistyped task id read as a real result: the caller either recorded
+# `assistance: full` against work the user did alone, or recorded nothing at
+# all and lost it. Errors take a code no verdict can (EX_USAGE, sysexits.h).
+EXIT_ERROR = 64
 
 
 def main() -> int:
     if len(sys.argv) < 3 or sys.argv[1] not in ("snapshot", "verify"):
         print(__doc__.strip().splitlines()[0])
         print("usage: verify_edit.py {snapshot|verify} <task-id> [path]")
-        return 2
+        return EXIT_ERROR
     cmd, task = sys.argv[1], sys.argv[2]
     cwd = sys.argv[3] if len(sys.argv) > 3 else "."
     return (snapshot if cmd == "snapshot" else verify)(task, cwd)
@@ -123,7 +129,7 @@ def snapshot(task: str, cwd: str = ".") -> int:
     if state is None:
         print("grit: not a git repository — cannot snapshot %s" % cwd)
         print("      verify will report attribution as 'unverified'.")
-        return 1
+        return EXIT_ERROR
     with open(_get_snapshot_path(cwd, task), "w", encoding="utf-8") as fh:
         json.dump({"task": task, "before": state.to_dict()}, fh, indent=2)
     hook = (
@@ -143,11 +149,14 @@ def verify(task: str, cwd: str = ".") -> int:
     """Report what changed and who can be proven to have written it."""
     before = _load_snapshot(task, cwd)
     if before is None:
-        return 1
+        return EXIT_ERROR
     after = _get_tree_state(cwd)
     if after is None:
+        # The message and bin/install.sh have always called this UNVERIFIED;
+        # only the exit code said ASSISTED. Credit is unchanged either way —
+        # both score as `full` — but the caller now reads what it is told.
         print("grit: not a git repository — attribution unverified")
-        return 1
+        return EXIT_UNVERIFIED
 
     changed = after.differs_from(before)
     assistant = _get_assistant_lines(cwd, before.at)

@@ -156,22 +156,26 @@ def check_verdicts(verify: str) -> None:
 
 def check_test_counts() -> dict[str, Optional[int]]:
     """§7 Claimed test counts must match what the suites print."""
+    # Discovered, not listed. bin/test_study_report.py existed for weeks while
+    # every "run these" block and this checker named the same three suites, so
+    # a quarter of the tests was invisible to the section whose whole point is
+    # running them. Anything matching test_*.py is a suite by definition.
+    suites = {
+        p_.stem: [sys.executable, "-B", str(p_)]
+        for p_ in sorted(ROOT.rglob("test_*.py"))
+        if ".git" not in p_.parts
+    }
+    suites["scoring"] = [sys.executable, "-B", str(SKILL / "score.py"), "selftest"]
     real: dict[str, Optional[int]] = {}
-    for label, cmd in {
-        "daemon": [sys.executable, "-B", str(SKILL / "test_serve.py")],
-        "hook": [sys.executable, "-B", str(ROOT / "hooks" / "test_hook.py")],
-        "scoring": [sys.executable, "-B", str(SKILL / "score.py"), "selftest"],
-    }.items():
+    for label, cmd in suites.items():
         out = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-        m = re.search(r"ok — (\d+) (?:scoring )?propert", out.stdout)
+        m = re.search(r"ok — (\d+)\s+(?:[\w_]+\s+)?propert", out.stdout)
         real[label] = int(m.group(1)) if m else None
     if None in real.values():
         add("SUITE DID NOT RUN", "tests", str(real))
     else:
         for p, text in live_docs():
-            for n in re.findall(
-                r"(\d+)\s+(?:integrity|hook|scoring|daemon)\s+propert", text
-            ):
+            for n in re.findall(r"(\d+)\s+[\w_]+\s+propert", text):
                 if int(n) not in real.values():
                     add(
                         "STALE TEST COUNT",
@@ -299,6 +303,33 @@ def check_adr_citations() -> None:
                 add("NO SUCH ADR", p_.relative_to(ROOT), "cites ADR %s" % n)
 
 
+def check_section_citations() -> None:
+    """§8e A "<Doc> §N" citation must name a section that document still has.
+
+    DESIGN.md was rewritten and renumbered; four citations kept pointing at the
+    old numbering — `DESIGN §8` for the privacy boundary (now §3), `Design §5`
+    for the oracle argument (now §2), `DESIGN.md §7` for an argument it never
+    made. A link checker passes all of them, because `DESIGN.md` exists. The
+    section is the claim, so the section is what gets checked.
+    """
+    headings: dict[str, set[str]] = {}
+    for p_, text in live_docs():
+        headings[p_.name] = set(re.findall(r"^#+\s+(\d+[a-z]?)\.", text, re.M))
+    cite_re = re.compile(r"\b([A-Za-z][\w-]*(?:\.md)?)\s+§(\d+[a-z]?)")
+    for p_, text in live_docs():
+        for doc, num in cite_re.findall(text):
+            name = doc if doc.endswith(".md") else doc.upper() + ".md"
+            if name == p_.name or name not in headings:
+                continue  # a self-reference or a document this repo does not own
+            if num not in headings[name]:
+                add(
+                    "DEAD SECTION CITATION",
+                    p_.relative_to(ROOT),
+                    "cites %s §%s; that document has §%s"
+                    % (name, num, ", §".join(sorted(headings[name])) or "none"),
+                )
+
+
 def check_adr_index() -> None:
     """§9 ADR index statuses must match the ADR files."""
     index = ROOT / ".sdlc" / "docs" / "adr" / "README.md"
@@ -347,13 +378,14 @@ def _run_checks() -> None:
     check_computed_values(S)
     check_cross_doc_agreement()
     check_adr_citations()
+    check_section_citations()
     check_adr_index()
 
 
 def main() -> int:
     _run_checks()
     if not findings:
-        print("docs ok — 12 classes of claim checked against the code")
+        print("docs ok — 13 classes of claim checked against the code")
         return 0
     _print_findings()
     return 1

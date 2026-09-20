@@ -50,7 +50,7 @@ JUDGMENTS: tuple[JudgmentVerdict, ...] = ("sound", "unsound", "pending")
 # Default only. Override with --port or GRIT_PORT; --port 0 takes any free port.
 # Whatever is actually bound gets written to <root>/daemon.json, and everything
 # downstream reads that rather than assuming this number.
-DEFAULT_PORT: int = int(os.environ.get("GRIT_PORT", 7801))
+DEFAULT_PORT: int = int(os.environ.get("GRIT_PORT", 4748))  # GRIT on a phone keypad
 
 # ── Dashboard themes (chosen at onboarding) ──────────────────────────────────
 # Names only; the palettes live in dashboard.html. Kept here so the daemon can
@@ -75,7 +75,6 @@ DEFAULT_PREFS: dict[str, Any] = {
     "depth": "standard",
     "pace": "one-at-a-time",
     "default_do_it_myself": True,
-    "visible_overrides": [],
 }
 
 
@@ -386,6 +385,9 @@ class Handler(BaseHTTPRequestHandler):
                     "root": self.state.root,
                 },
                 "authorship": self.state.authorship(),
+                "notices": _compose_config_notices(
+                    self.state.root, self.state.load_prefs()
+                ),
                 "built": {
                     "authorship_hook": True,
                     "dashboard": True,
@@ -641,7 +643,7 @@ class State:
     # Gate 3 is the assistant's verdict and may land minutes or hours after the
     # justification. In-memory-only sessions meant any restart in that window
     # stranded the concept permanently unearned, with no route to fix it except
-    # hand-editing the ledger — which ADR 0009 forbids.
+    # hand-editing the ledger — which ADR 0006 forbids.
     def _load_sessions(self) -> None:
         if not os.path.exists(self.sessions_path):
             return
@@ -1265,6 +1267,54 @@ def _is_earned(session: Session) -> bool:
     if not gates.get("check", {}).get("passed"):
         return False
     return gates.get("judgment", {}).get("judgment") == "sound"
+
+
+def _compose_config_notices(root: str, prefs: dict[str, Any]) -> list[dict[str, str]]:
+    """What the product is doing to itself — never what a session did.
+
+    Two rules meet here and used to look like they contradicted each other.
+    Opting out of a task records nothing about that task, and that stays true:
+    measuring someone who declined is surveillance. But a *standing setting*
+    that disables the only function this product has is not a session, and
+    leaving it unsaid is the METR pattern — feeling fine while capability
+    erodes with nothing on screen to disagree. So the setting is shown, and
+    the outcomes under it are shown as counts. Nothing here overrules a
+    preference; a correction the user cannot see applied is applied by stealth.
+
+    `visible_overrides` used to be a preferences key for this and was never
+    written or read by anything. A stored list would be a second place the
+    answer lives, which is the defect `earned` exists not to have.
+    """
+    notices: list[dict[str, str]] = []
+    if prefs.get("default_do_it_myself") is False:
+        notices.append(
+            {
+                "kind": "mechanism-off",
+                "text": (
+                    "Your default is to hand work straight over. Nothing is "
+                    "being offered, and nothing is being scored."
+                ),
+            }
+        )
+    try:
+        rows = _import_sibling("score").load(root)
+    except Exception:
+        return notices  # scoring unavailable is already reported elsewhere
+    walked = [r for r in rows if r.assistance == "partial"]
+    missed = [r for r in walked if r.failed]
+    if missed:
+        notices.append(
+            {
+                "kind": "preference-vs-outcome",
+                "text": (
+                    "%d of your %d walked-through attempts did not pass. "
+                    "Walking through it may not be working for you — the "
+                    "counts are here; the choice stays yours."
+                )
+                % (len(missed), len(walked)),
+            }
+        )
+    return notices
 
 
 def _score_profile(root: str) -> dict[str, Any]:

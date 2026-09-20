@@ -25,9 +25,10 @@ Conventions for working in this repository that you **cannot get by reading the 
 Almost every defect in this repository's history was found by executing something, and missed by reading it. Reading finds the bug you were already looking for.
 
 ```sh
-python3 skills/grit/test_serve.py      # 13 integrity properties
-python3 hooks/test_hook.py             # 19 hook properties
-python3 skills/grit/score.py selftest  # 18 scoring properties
+python3 skills/grit/test_serve.py      # 14 integrity properties
+python3 hooks/test_hook.py             # 20 hook properties
+python3 skills/grit/score.py selftest  # 19 scoring properties
+python3 bin/test_study_report.py       # 5 study_report properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
 ```
@@ -103,7 +104,7 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 This product argues that a record which can be edited proves nothing. That applies to working on it, not just to using it.
 
-- **`~/.grit/evidence.jsonl` and the ledger are append-only.** The remedy for a wrong record is a new measurement, never an edit — including when the mistake was the assistant's. That is the exact case an audit trail exists for.
+- **`~/.grit/evidence.jsonl` and the ledger are append-only**, in different senses that matter when you edit either. `evidence.jsonl` is physically appended, one row per write. `ledger.json` is rewritten whole by `save_ledger`, and is append-only by *rule*: rows are added, gate 3 appends a judgment, and nothing already written is altered. The remedy for a wrong record is a new measurement, never an edit — including when the mistake was the assistant's. That is the exact case an audit trail exists for.
 - **`earned` is derived in one function and assigned nowhere.** Two code paths that both decide what a word means will eventually disagree, invisibly.
 - **A hook can never block a tool call.** Every registration carries `|| exit 0` — see [ADR 0007](.sdlc/docs/adr/0007-hooks-must-fail-open.md).
 - **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.

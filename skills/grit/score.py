@@ -45,6 +45,7 @@ import argparse
 import difflib
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -185,7 +186,7 @@ Ev = Callable[..., EvidenceRow]
 #   1 unaided repo task      0.50  -> recall
 #   2 distinct unaided tasks 1.00  -> proven
 #   the SAME task twice      0.75  -> still recall (novelty halves the repeat)
-#   one tutorial, ground     ~0.40 -> recall ceiling, never proven
+#   one tutorial, ground      0.30 -> recall ceiling, never proven
 SOURCE_WEIGHT: dict[str, float] = {"repo": 0.5, "sandbox": 0.2}
 
 # The core claim of the product, as a number.
@@ -557,7 +558,37 @@ def _demo() -> None:
     _check_task_identity(ev, now)
     _check_near_duplicate_detection()
     _check_failed_flag_reaches_the_file()
-    print("ok — 18 scoring properties hold")
+    _check_worked_examples_match_the_model(ev, now)
+    print("ok — 19 scoring properties hold")
+
+
+def _check_worked_examples_match_the_model(ev: Ev, now: datetime) -> None:
+    # The worked examples above SOURCE_WEIGHT are read as the calibration, so
+    # they have to be the model's output and not a sentence. One of them said
+    # `~0.40` for the tutorial ceiling right through the change that halved
+    # every weight — the real figure is 0.30, and nothing was computing it.
+    # This parses the block out of this file, so prose and model cannot drift.
+    repo = lambda task: ev("repo", "none", task)
+    scenarios = [
+        [repo("t1")],
+        [repo("t1"), repo("t2")],
+        [repo("t1"), repo("t1")],
+        [ev("sandbox", "none", "t1")] * 50,
+    ]
+    with open(__file__, encoding="utf-8") as fh:
+        block = re.findall(r"^#\s+\S.*?\s([0-9.]+)\s+->\s*(.+)$", fh.read(), re.M)
+    assert len(block) == len(scenarios), (
+        "the weights comment lists %d worked examples, the selftest computes %d"
+        % (len(block), len(scenarios))
+    )
+    for (claimed, level), rows in zip(block, scenarios):
+        got = score_concept(rows, now)
+        assert abs(got.score - float(claimed)) < 1e-9, (
+            "the weights comment says %s, the model computes %.4f" % (claimed, got.score)
+        )
+        assert got.level in level, (
+            "the weights comment says %r, the model says %s" % (level, got.level)
+        )
 
 
 def _check_assistance(ev: Ev, now: datetime) -> None:

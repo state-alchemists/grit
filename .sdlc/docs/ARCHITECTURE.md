@@ -137,7 +137,7 @@ Localhost only, no cross-origin. Three responsibilities: serve the dashboard and
 | Route | Returns |
 |---|---|
 | `/` | the dashboard (read from disk per request — no restart needed to edit it) |
-| `/status` | everything `/grit` needs in one call |
+| `/status` | everything `/grit` needs in one call, including the derived `notices` — a setting that switches the mechanism off is shown, never stored |
 | `/score`, `/profile` | per-concept levels |
 | `/authorship` | assistant-written lines per project |
 | `/tutorials`, `/ledger`, `/preferences`, `/themes`, `/health` | as named |
@@ -180,6 +180,7 @@ Break any of these and the record stops meaning anything. Each has a test, and e
 python3 skills/grit/test_serve.py      # daemon integrity
 python3 skills/grit/score.py selftest  # the scoring model
 python3 hooks/test_hook.py             # the hook
+python3 bin/test_study_report.py       # the retrospective study instrument
 python3 skills/grit/doctor.py          # this machine's registrations
 python3 bin/check_docs.py              # the docs against the code
 ```

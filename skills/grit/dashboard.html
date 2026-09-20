@@ -212,6 +212,8 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <button class="ghost" id="settings">Settings</button>
   </header>
 
+  <div class="panel" id="notices" hidden style="border-color:var(--accent)"></div>
+
   <div class="panel" id="allempty" hidden style="border-color:var(--accent)">
     <h2>Start here</h2>
     <p style="margin-top:0">Nothing has been measured yet. Two ways to change that:
@@ -429,6 +431,14 @@ async function render() {
     getJSON("/authorship"),
   ]);
   const sc = await getJSON("/score", {concepts: {}, headline: {}});
+
+  // A setting that switches the mechanism off is shown, never inferred from.
+  // Silence here is the failure mode the product exists to treat: the record
+  // looks fine because nothing is being recorded.
+  const notices = (await getJSON("/status", {notices: []})).notices || [];
+  $("#notices").hidden = !notices.length;
+  $("#notices").innerHTML = notices
+    .map(n => `<p class="muted">${escapeHtml(n.text)}</p>`).join("");
 
   // Say plainly when a panel's data never arrived. A zero the user cannot
   // distinguish from a real zero is worse than an error.

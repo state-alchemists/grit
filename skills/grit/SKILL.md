@@ -65,7 +65,7 @@ Rules:
 - **Offer once per activation**, even when the phrasing sounds like a request for direct help. "Just fix this" is a legitimate answer — it just has to be a *chosen* one.
 - **Never nag.** One offer. If they pick 3, proceed and do not raise it again.
 - **Never moralise.** No praise for picking 1, no warnings for picking 3. State, take the answer, move on.
-- **Option 3 means stop.** Do not track, measure, or create tasks. Recording someone who opted out is surveillance.
+- **Option 3 means stop.** Do not track, measure, or create tasks. Recording someone who opted out is surveillance. Their *standing default* is a different thing and the dashboard does show it — a setting that switches the whole mechanism off should not be invisible — but that is the setting on screen, never the work of a session they declined.
 - **A stored preference is a default, not a policy.** If they've said "always let me do it", open with that pre-selected — but still offer, because circumstances change. What they say now wins.
 
 ---
@@ -151,6 +151,7 @@ python3 <skill-dir>/verify_edit.py verify <task-id>
 | `ASSISTED` | 1 | `full` — you wrote part of it, so it scores zero |
 | `NOTHING CHANGED` | 2 | **record nothing.** The check was already green |
 | `UNVERIFIED` | 3 | `full`. Nobody can prove who typed it, so it cannot count as theirs |
+| *(not a verdict)* | 64 | **record nothing, and say why.** The tool could not run — usually no snapshot for that task id. Fix the invocation and re-run; never guess the verdict |
 
 **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.
 
@@ -228,8 +229,8 @@ Three properties that must survive every edit:
 `serve.py`, in this skill's directory, owns the tutorial session and the record. Start it when a tutorial needs delivering:
 
 ```sh
-python3 <skill-dir>/serve.py --root ~/.grit    # default port 7801
-python3 <skill-dir>/serve.py --port 0          # any free port, if 7801 is taken
+python3 <skill-dir>/serve.py --root ~/.grit    # default port 4748
+python3 <skill-dir>/serve.py --port 0          # any free port, if 4748 is taken
 ```
 
 **Never assume the port.** The daemon writes its real address to `~/.grit/daemon.json` on startup. Read the `url` field out of that file before building any request or telling the user where to look — `cat ~/.grit/daemon.json` and take `url` verbatim.
@@ -240,7 +241,7 @@ If the file is missing, or connecting fails, the daemon is not running — start
 
 What you need to know to use it correctly:
 
-- **It binds to localhost only**, and it is the only thing that writes the record. Never hand-edit `ledger.json` or `evidence.jsonl` to make something true. The profile is recomputed from evidence on every read — editing it is not even possible.
+- **It binds to localhost only**, and it is the only thing that writes the record. Never hand-edit `ledger.json` or `evidence.jsonl` to make something true. Nothing prevents you — they are files on their disk — but the profile is recomputed from evidence on every read, so there is no stored score to edit, only the evidence underneath it. Forging that changes the number and proves nothing, which is the whole reason the number is derived.
 - **You cast the third gate, and you have a separate credential for it.** Launching a tutorial prints a ready-to-run command to the daemon's terminal. Read the user's justification, decide, then run it:
 
 **Copy the command the daemon printed to its own terminal** — it already contains the correct address and token. Do not assemble your own from memory; the port may not be the default.

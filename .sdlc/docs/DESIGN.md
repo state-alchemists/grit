@@ -34,6 +34,8 @@ So preference sets the **default**, and outcomes get to **overrule** it. A user 
 
 **A preference that turns the mechanism off should be visible, not silent.** "Default: just do it for me" is the user's call, but it is recorded and shown, because a configuration that quietly disables the product's only function is the METR pattern — feeling fine while capability erodes, with nothing on screen to contradict it.
 
+**This is the setting, never the session.** The two look like one rule and are not, and reading them as one produced a live contradiction with the skill for as long as neither was implemented. Declining a task is measured *not at all* — no authorship, no evidence, no ledger row — because measuring someone who opted out is surveillance. The standing configuration is a different object: it is not work, it is what the product is doing to itself, and it belongs on screen. `serve.py`'s `_compose_config_notices` derives both from what is already there and stores neither; a preferences key holding the answer would be a second place for it to live.
+
 ### The record is append-only, and corrections do not rewrite it
 
 Every mechanism that could edit the past has been closed, one incident at a time: the page cannot award its own judgment ([ADR 0006](adr/0006-two-credentials-per-session.md)), a verdict cannot be overwritten once cast, `earned` is derived rather than assigned, and no raw credential enters a readable file.
@@ -85,7 +87,8 @@ Stated here rather than left to be discovered.
 5. **Retention is unmeasured.** Only behaviour at the time is observable. Nothing here measures what you can still do in a month, which is the outcome the product is named for.
 6. **Sandbox tutorials may not transfer.** Passing a JavaScript exercise about token buckets is not evidence you can implement one in Go. The weights encode a guess at the gap, not a finding.
 7. **Population transfer.** The mechanism evidence is from novices. The one study in the target population — METR, 16 experienced developers — measured speed, not skill.
-8. **Concept names are chosen in conversation.** They are the schema, and two people naming the same idea differently produce incomparable records. Mitigated by a near-duplicate warning; not solved.
+8. **The offer itself has a bypass, and bypasses are taken by the people who need them least.** Kapoor et al. (2025, N=885) measured a three-way mode choice with a "See Solution" escape: 50% took it, and the lower-performing students took it most. That design is recorded as a rejected alternative in [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md), and the skill still opens with a three-way choice. The defence is real but narrow — 0011 rejects routing on *what the user claims to know*, and this asks *what they want to do*, with the score measured either way — so nothing here is self-certified. What is unproven is whether that distinction survives contact with a deadline. The replacement, routing on a measured profile, is deferred and unbuilt.
+9. **Concept names are chosen in conversation.** They are the schema, and two people naming the same idea differently produce incomparable records. Mitigated by a near-duplicate warning; not solved.
 
 ---
 

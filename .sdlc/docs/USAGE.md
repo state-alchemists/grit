@@ -2,15 +2,17 @@
 
 A worked example showing what using Grit actually looks like. The scenario: adding rate limiting to an existing Node API.
 
+- **Status**: Superseded — kept as history, describes a flow no code implements
+
 This is a design walkthrough, not a transcript of a working tool. Interaction shapes are representative of the intended experience.
 
 ---
 
 ## A note on this walkthrough's design
 
-This example reflects the design as first written: per-mission modes with a free-attempt default. [DESIGN.md §7](DESIGN.md) now argues that the "Attempt" mode shown below should be replaced with **step-gated dialog** — the user states what the code must do at each stage before it is revealed ([Kazemitabaar et al., IUI 2025](https://arxiv.org/abs/2410.08922)). The reason: Kapoor et al. (2025, N=885) measured this style of voluntary guardrail failing, with 50% of students taking the bypass. Step-gating has no bypass button.
+This example reflects the design as first written: per-mission modes with a free-attempt default. That design was measured failing — Kapoor et al. (2025, N=885) found 50% of students took the "See Solution" bypass, and the lower-performing ones took it most — and it is recorded as a rejected alternative in [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md). An earlier version of this note said DESIGN.md argued for replacing it with **step-gated dialog** ([Kazemitabaar et al., IUI 2025](https://arxiv.org/abs/2410.08922)); it does not, and [ADR 0002](adr/0002-withhold-guidance-by-default.md) rejects *uniform* step-gating outright, because scaffolding an expert who does not need it is the expertise-reversal effect.
 
-The example below is kept as-is because it shows the tracking model, the tutorial generation, and the honest ledger — all of which survive the change. Read the mode mechanics as provisional.
+The example below is kept as-is because it shows the tracking model, the tutorial generation, and the honest ledger — all of which survive the change. Read the mode mechanics as history, not as a specification: nothing in this file is checked against the code.
 
 ---
 
