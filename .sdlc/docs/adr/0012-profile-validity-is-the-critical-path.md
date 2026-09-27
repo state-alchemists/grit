@@ -15,7 +15,7 @@ Every decision in this repository depends on one unverified assumption: **that t
 - [ADR 0010](0010-proficiency-decays-with-inactivity.md) ages it.
 - [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) would route on it, if it were built.
 
-If a `proven` concept does not predict real capability, then the levels are noise, the dashboard is a confident view of a guess, and the product's central claim — *"a score you did not award yourself"* — is true about the mechanism and empty about the meaning. The design does not degrade gracefully in that case. It collapses to a measurement of who typed what, which is [ADR 0001](0001-measure-the-effect.md) and nothing more.
+If a `shipped` concept does not predict real capability, then the levels are noise, the dashboard is a confident view of a guess, and the product's central claim — *"a score you did not award yourself"* — is true about the mechanism and empty about the meaning. The design does not degrade gracefully in that case. It collapses to a measurement of who typed what, which is [ADR 0001](0001-measure-the-effect.md) and nothing more.
 
 This is not a hypothetical risk to note and proceed past. It is the load-bearing claim.
 
@@ -35,21 +35,21 @@ This is not a hypothetical risk to note and proceed past. It is the load-bearing
 
 Q1, Q2 and Q2b are already answerable in miniature. `bin/study_report.py` computes them retrospectively from an existing `evidence.jsonl` — no new instrumentation was needed, because every unaided repository event already carries its own later outcome (its `failed` flag). That does not answer the questions; it only means the answer is a command away once enough real usage has accumulated. A first look at one person's own log is not the study, which still needs the ≥5-tasks-per-condition, preregistered, multi-week design under "Method constraints" below — the status stays **unrun**.
 
-**Q1 — Does the level predict unassisted real-work proficiency?** Take the concepts a profile rates `proven`, `recall` and `unproven`. Over the following weeks, record actual unassisted performance on those same concepts in real work. If levels and outcomes agree at better than chance, the score carries information. If not, it is an expensive activity log.
+**Q1 — Does the level predict unassisted real-work proficiency?** Take the concepts a profile rates `shipped`, `practised` and `learning`. Over the following weeks, record actual unassisted performance on those same concepts in real work. If levels and outcomes agree at better than chance, the score carries information. If not, it is an expensive activity log.
 
-**Q2 — Does the score under-rate experts?** Compare levels against demonstrated performance **separately for concepts used frequently vs. rarely**. The specific risk here is structural, not statistical: `proven` requires two distinct unaided repository tasks, so an expert who simply has not done two scoreable tasks in a concept is recorded at `recall` indefinitely. If the frequently-used set is systematically under-rated, the threshold is measuring opportunity rather than capability.
+**Q2 — Does the score under-rate experts?** Compare levels against demonstrated performance **separately for concepts used frequently vs. rarely**. The specific risk here is structural, not statistical: `shipped` requires two distinct unaided repository tasks, so an expert who simply has not done two scoreable tasks in a concept is recorded at `practised` indefinitely. If the frequently-used set is systematically under-rated, the threshold is measuring opportunity rather than capability.
 
 **Q2b — Does `assistance: partial` carry information?** It is the one self-reported coefficient in the model. If `partial` outcomes are indistinguishable from `none` outcomes, the coefficient is decoration and should be cut rather than defended.
 
 **Q3 — Adaptive vs. uniform vs. none.** Three conditions, randomised per task: adaptive gating, uniform gating, no gating. Contingent on Q1 succeeding, and contingent on a router existing. Predicts the adaptive condition wins; a real chance it does not.
 
-**Q4 — Do stated preferences match what works?** Record the chosen tutorial format and the subsequent justification outcome. If format choice predicts nothing about outcome, preference is decoration and should stop being a first-class input.
+**Q4 — Do stated preferences match what works?** Record the chosen mode (solo or guided) and the task's outcome. If the choice predicts nothing about outcome, preference is decoration and should stop being a first-class input.
 
 ## Preregistered predictions, with real chances of failing
 
-1. The score will **under-rate concepts the user is expert in but has not recently done scoreable work on**, because the two-task threshold measures opportunity as well as capability. If this holds, `proven` needs a path that does not depend on task count.
-2. **`partial` and `none` may produce indistinguishable outcomes**, because the hook cannot see whether the user read a tutorial first and the assistant's estimate is a guess. If so, the coefficient should be cut.
-3. **The judgment gate may pass justifications that later fail on the same concept.** It is a model output with no ground truth. If judge-sound answers fail at the rate of judge-unsound ones, the third gate is ceremony.
+1. The score will **under-rate concepts the user is expert in but has not recently done scoreable work on**, because the two-task threshold measures opportunity as well as capability. If this holds, `shipped` needs a path that does not depend on task count.
+2. **`partial` and `none` may produce indistinguishable outcomes**, because the hook cannot see how much the user was walked through. If so, the coefficient should be cut.
+3. **The assistant's judgment of a justification may pass ones that later fail on the same concept.** It is a model output with no ground truth. If judge-sound answers fail at the rate of judge-unsound ones, asking for a justification is ceremony.
 
 ## Method constraints
 

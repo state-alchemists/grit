@@ -25,8 +25,9 @@ from typing import Any, Callable, Iterable, Iterator, Optional
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "grit"
 
-# Historical by declaration: a worked example of a flow that no longer exists.
-HISTORICAL = {"USAGE.md"}
+# History by definition: it quotes what used to be true, including files and
+# numbers that no longer exist. Same reasoning as a superseded ADR.
+HISTORICAL = {"CHANGELOG.md"}
 
 # Vendored by the sdlc-* skills: a path catalogue and fill-in templates that
 # describe what those skills would generate, not what this repository has. Their
@@ -84,7 +85,7 @@ def check_runtime_files(serve: str, score: str) -> None:
     """§2 Runtime files must be ones the code actually writes."""
     written = set(re.findall(r'"([a-z_]+\.jsonl?)"', serve + score))
     written |= {"authorship.jsonl", "daemon.log", "off"}
-    dirs = {"tutorials", "snapshots", "asked"}
+    dirs = {"snapshots", "asked", "pending-shell"}
     runtime_re = re.compile(r"`(?:~/\.grit/|<project>/\.grit/|\./\.grit/)([\w./-]+)`")
     for p, text in live_docs():
         for ref in set(runtime_re.findall(text)):
@@ -105,7 +106,7 @@ def check_endpoints(serve: str) -> None:
     routed = set(re.findall(r'"(/[a-z]+)":', serve))  # route table
     routed |= set(re.findall(r'path == "(/[a-z]+)"', serve))  # if-chain
     routed |= {"/" + n for n in re.findall(r'parts\[0\] == "([a-z]+)"', serve)}
-    routed |= {"/", "/tutorial"}
+    routed |= {"/"}
     not_endpoints = {"/grit", "/v1"}  # slash command, upstream API
     for p, text in live_docs():
         for ep in set(re.findall(r"`(/[a-z]+)`", text)):
@@ -128,12 +129,13 @@ def check_scoring_constants(score: str) -> None:
     """§5 Scoring constants quoted in prose must match the code."""
     for label, needle in [
         ("repo 0.5", 'SOURCE_WEIGHT: dict[str, float] = {"repo": 0.5'),
-        ("sandbox 0.2", '"sandbox": 0.2'),
-        ("recall 0.30", "RECALL_AT = 0.30"),
-        ("proven 0.80", "PROVEN_AT = 0.80"),
+        ("practised 0.30", "PRACTISED_AT = 0.30"),
+        ("shipped 0.80", "SHIPPED_AT = 0.80"),
         ("per-task cap 1.5", "PER_TASK_CAP = 1.5"),
-        ("two unaided tasks", "PROVEN_NEEDS_UNAIDED_TASKS = 2"),
+        ("two unaided tasks", "SHIPPED_NEEDS_UNAIDED_TASKS = 2"),
         ("decay 90 days", "STALE_DAYS = 90"),
+        ("stale evidence counts half", "STALE_WEIGHT = 0.5"),
+        ("failures subtract 0.25", "FAILURE_PENALTY = 0.25"),
     ]:
         if needle not in score:
             add(
@@ -173,16 +175,53 @@ def check_test_counts() -> dict[str, Optional[int]]:
         real[label] = int(m.group(1)) if m else None
     if None in real.values():
         add("SUITE DID NOT RUN", "tests", str(real))
-    else:
-        for p, text in live_docs():
-            for n in re.findall(r"(\d+)\s+[\w_]+\s+propert", text):
-                if int(n) not in real.values():
-                    add(
-                        "STALE TEST COUNT",
-                        p.relative_to(ROOT),
-                        "doc says %s, suites report %s" % (n, real),
-                    )
+        return real
+    # A count is checked against the suite named on its own line. Matching it
+    # against *any* suite let "21 scoring properties" pass once the hook suite
+    # happened to reach 21, and flagged an unrelated "20 setting properties".
+    named = {"score.py selftest": "scoring"}
+    named.update({label + ".py": label for label in real if label != "scoring"})
+    for p, text in live_docs():
+        for line in text.splitlines():
+            m = re.search(r"(\d+)\s+[\w_]+\s+propert", line)
+            suite = next((named[k] for k in named if k in line), None)
+            if m and suite and int(m.group(1)) != real[suite]:
+                add(
+                    "STALE TEST COUNT",
+                    p.relative_to(ROOT),
+                    "doc says %s for %s, it reports %d"
+                    % (m.group(1), suite, real[suite]),
+                )
     return real
+
+
+def check_hook_constants() -> None:
+    """§7b A de-duplication window quoted in prose must be the hook's.
+
+    Four docs said "2-second" for a window that had been 250ms since the
+    constant was narrowed; nothing compared them because the number lives in
+    the hook, not in score.py.
+    """
+    hook = (ROOT / "hooks" / "grit-hook.py").read_text()
+    m = re.search(r"^DEDUPE_WINDOW = ([0-9.]+)", hook, re.M)
+    if not m:
+        add("CONSTANT DRIFT", "grit-hook.py", "DEDUPE_WINDOW not found")
+        return
+    window = float(m.group(1))
+    duration = re.compile(r"(\d+(?:\.\d+)?)[- ]?(ms|milliseconds?|s|seconds?)\b")
+    for p_, text in live_docs():
+        for line in text.splitlines():
+            if not re.search(r"de-?dup", line, re.I):
+                continue
+            for value, unit in duration.findall(line):
+                seconds = float(value) / (1000 if unit.startswith("m") else 1)
+                if abs(seconds - window) > 1e-9:
+                    add(
+                        "CONSTANT DRIFT",
+                        p_.relative_to(ROOT),
+                        "de-dup window quoted as %s%s; DEDUPE_WINDOW is %ss"
+                        % (value, unit, window),
+                    )
 
 
 def check_computed_values(score_module: Any) -> None:
@@ -191,54 +230,39 @@ def check_computed_values(score_module: Any) -> None:
     Constant DRIFT (§5) only proves a constant is still in the file. It cannot
     see prose that quotes a number the model no longer produces — which is how
     "plateaus around 0.4" survived the weights being halved, and how SKILL.md
-    came to promise `proven` after one unaided task when the code wants two.
+    came to promise `shipped` after one unaided task when the code wants two.
     """
     computed = _compute_quotable_numbers(score_module)
     for p_, text in live_docs():
         rel = p_.relative_to(ROOT)
         _check_plateau_claims(text, rel, computed["plateau"])
         _check_unaided_task_claims(text, rel, computed["needs_unaided"])
-        _check_sandbox_ceiling_claims(text, rel, computed["sandbox_ceiling"])
+        _check_repeat_ceiling_claims(text, rel, computed["repeat_ceiling"])
 
 
 def _compute_quotable_numbers(score_module: Any) -> dict[str, Any]:
     """The numbers the docs are allowed to quote, computed from the model.
 
-    A tutorial ground forever gives the plateau — the per-task cap is the
-    ceiling.
+    One task repeated forever gives the plateau and its level — the per-task
+    cap is the ceiling, and `shipped` needs distinct tasks.
     """
     now = datetime(2026, 1, 2, tzinfo=timezone.utc)
-    grounded = [
+    repeated = [
         score_module.EvidenceRow(
             at="2026-01-01T00:00:00+00:00",
             concept="c",
-            source="sandbox",
+            source="repo",
             assistance="none",
             task="t",
             failed=False,
-            project="",
+            project="/p",
         )
     ] * 50
-    # DISTINCT sandbox exercises, which is the beginner path: the score climbs
-    # but the LEVEL must not, because `proven` is gated on repository work.
-    # Three docs now tell beginners where that ceiling is; none of them could
-    # notice PROVEN_NEEDS_UNAIDED_TASKS dropping to 0 underneath them.
-    many = [
-        score_module.EvidenceRow(
-            at="2026-01-01T00:00:00+00:00",
-            concept="c",
-            source="sandbox",
-            assistance="none",
-            task="t%d" % i,
-            failed=False,
-            project="",
-        )
-        for i in range(12)
-    ]
+    result = score_module.score_concept(repeated, now)
     return {
-        "plateau": round(score_module.score_concept(grounded, now).score, 4),
-        "needs_unaided": score_module.PROVEN_NEEDS_UNAIDED_TASKS,
-        "sandbox_ceiling": score_module.score_concept(many, now).level,
+        "plateau": round(result.score, 4),
+        "needs_unaided": score_module.SHIPPED_NEEDS_UNAIDED_TASKS,
+        "repeat_ceiling": result.level,
     }
 
 
@@ -256,17 +280,16 @@ def _check_plateau_claims(text: str, rel: Any, plateau: float) -> None:
             )
 
 
-def _check_sandbox_ceiling_claims(text: str, rel: Any, ceiling: str) -> None:
-    """A doc telling a beginner how far exercises alone can take them must name
-    the level the model actually produces from a pile of distinct sandbox
-    events. Said in three files now, and derived in none of them."""
-    pat = r"(?:ceiling of|caps? at|tops? out at)\s+`?(unproven|recall|proven)`?"
+def _check_repeat_ceiling_claims(text: str, rel: Any, ceiling: str) -> None:
+    """A doc saying how far repeating one task can take you must name the level
+    the model actually produces from it."""
+    pat = r"(?:ceiling of|caps? at|tops? out at)\s+`?(learning|practised|shipped)`?"
     for m in re.finditer(pat, text, re.I):
         if m.group(1).lower() != ceiling:
             add(
                 "COMPUTED VALUE DRIFT",
                 rel,
-                "doc says sandbox work tops out at `%s`; the model computes `%s`"
+                "doc says repetition tops out at `%s`; the model computes `%s`"
                 % (m.group(1), ceiling),
             )
 
@@ -283,8 +306,8 @@ def _check_unaided_task_claims(text: str, rel: Any, needs_unaided: int) -> None:
             add(
                 "COMPUTED VALUE DRIFT",
                 rel,
-                "doc says `proven` needs %s unaided repository task(s); "
-                "PROVEN_NEEDS_UNAIDED_TASKS is %d" % (raw, needs_unaided),
+                "doc says `shipped` needs %s unaided repository task(s); "
+                "SHIPPED_NEEDS_UNAIDED_TASKS is %d" % (raw, needs_unaided),
             )
 
 
@@ -418,6 +441,7 @@ def _run_checks() -> None:
         lambda: check_scoring_constants(score),
         lambda: check_verdicts(verify),
         lambda: check_test_counts(),
+        lambda: check_hook_constants(),
         lambda: check_computed_values(S),
         lambda: check_cross_doc_agreement(),
         lambda: check_adr_citations(),

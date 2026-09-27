@@ -40,10 +40,10 @@ def ev(
 
 
 def _check_q1_predicts_from_prior_events_only() -> None:
-    # c1: one unaided pass, no history -> predicted "unproven" (score_concept([])).
-    # c2: one unaided fail, no history -> predicted "unproven" too.
+    # c1: one unaided pass, no history -> predicted "learning" (score_concept([])).
+    # c2: one unaided fail, no history -> predicted "learning" too.
     # c3: two unaided passes -> the SECOND is predicted from the first (a real
-    # 0.5 score), landing in "recall". The first is still "unproven": nothing
+    # 0.5 score), landing in "practised". The first is still "learning": nothing
     # precedes it, and it must not see its own outcome or c1/c2's events.
     rows = [
         ev("c1", "repo", "none", "2026-01-01T00:00:00+00:00", failed=False),
@@ -52,15 +52,16 @@ def _check_q1_predicts_from_prior_events_only() -> None:
         ev("c3", "repo", "none", "2026-01-02T00:00:00+00:00", failed=False, task="b"),
     ]
     out = SR.q1_predicted_vs_actual(rows)
-    assert out["unproven"] == {"pass": 2, "fail": 1}, out
-    assert out["recall"] == {"pass": 1, "fail": 0}, out
-    assert "proven" not in out, out
+    assert out["learning"] == {"pass": 2, "fail": 1}, out
+    assert out["practised"] == {"pass": 1, "fail": 0}, out
+    assert "shipped" not in out, out
 
 
-def _check_q1_ignores_assisted_and_sandbox_events() -> None:
+def _check_q1_ignores_assisted_and_legacy_events() -> None:
     # Only source=repo, assistance=none events are predictions to score. An
-    # AI-written or sandbox event is real evidence for the LEVEL but is not
-    # itself the kind of outcome Q1 is correlating against.
+    # AI-written event is real evidence for the LEVEL but is not itself the
+    # kind of outcome Q1 correlates against; a legacy `sandbox` row (from the
+    # removed tutorials) is not evidence at all.
     rows = [
         ev("c", "repo", "full", "2026-01-01T00:00:00+00:00"),
         ev("c", "sandbox", "none", "2026-01-01T00:00:00+00:00"),
@@ -88,18 +89,20 @@ def _check_q2_splits_by_total_event_count_per_concept() -> None:
 
     assert total(frequent) == SR.FREQUENT_AT, frequent
     assert total(rare) == 1, rare
-    assert rare.get("unproven") == {"pass": 1, "fail": 0}, rare
+    assert rare.get("learning") == {"pass": 1, "fail": 0}, rare
 
 
 def _check_q2b_compares_partial_against_none_by_assistance() -> None:
     rows = [
         ev("c", "repo", "none", "2026-01-01T00:00:00+00:00", failed=False),
         ev("c", "repo", "none", "2026-01-01T00:00:00+00:00", failed=True),
-        ev("c", "sandbox", "partial", "2026-01-01T00:00:00+00:00", failed=True),
+        ev("c", "repo", "partial", "2026-01-01T00:00:00+00:00", failed=True),
+        ev("c", "sandbox", "partial", "2026-01-01T00:00:00+00:00", failed=False),
         ev("c", "repo", "full", "2026-01-01T00:00:00+00:00", failed=True),
     ]
     out = SR.q2b_partial_vs_none(rows)
     assert out["none"] == {"pass": 1, "fail": 1}, out
+    # The legacy sandbox pass is not counted: it would make `partial` look better.
     assert out["partial"] == {"pass": 0, "fail": 1}, out
     assert "full" not in out, out
 
@@ -110,12 +113,16 @@ def _check_main_handles_an_empty_root_without_crashing() -> None:
 
 
 def main() -> int:
-    _check_q1_predicts_from_prior_events_only()
-    _check_q1_ignores_assisted_and_sandbox_events()
-    _check_q2_splits_by_total_event_count_per_concept()
-    _check_q2b_compares_partial_against_none_by_assistance()
-    _check_main_handles_an_empty_root_without_crashing()
-    print("ok — 5 study_report properties hold")
+    properties = [
+        _check_q1_predicts_from_prior_events_only,
+        _check_q1_ignores_assisted_and_legacy_events,
+        _check_q2_splits_by_total_event_count_per_concept,
+        _check_q2b_compares_partial_against_none_by_assistance,
+        _check_main_handles_an_empty_root_without_crashing,
+    ]
+    for check in properties:
+        check()
+    print("ok — %d study_report properties hold" % len(properties))
     return 0
 
 

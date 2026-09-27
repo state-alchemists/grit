@@ -6,7 +6,7 @@ Conventions for working in this repository that you **cannot get by reading the 
 
 ## 1. The rules that are not negotiable
 
-**The skill never mentions ADRs.** `skills/grit/SKILL.md`, `skills/grit/dashboard.html`, `skills/grit/tutorial.template.html`, and every error message and screen the user sees. Decision records are internal engineering history for contributors; citing one at a user is leaking your own filing system into their product. Explain the *reason* if it matters, drop it if it doesn't. This is checked by hand — nothing enforces it, so check before you ship.
+**The skill never mentions ADRs.** `skills/grit/SKILL.md`, `skills/grit/dashboard.html`, and every error message and screen the user sees. Decision records are internal engineering history for contributors; citing one at a user is leaking your own filing system into their product. Explain the *reason* if it matters, drop it if it doesn't. This is checked by hand — nothing enforces it, so check before you ship.
 
 **Markdown is never hard-wrapped.** One line per paragraph, however long. Hard wraps make every subsequent edit a noisy multi-line diff. Do not reflow a file to 80, 95, or any other column, and do not "tidy" a long line you happen to be editing near.
 
@@ -25,9 +25,9 @@ Conventions for working in this repository that you **cannot get by reading the 
 Almost every defect in this repository's history was found by executing something, and missed by reading it. Reading finds the bug you were already looking for.
 
 ```sh
-python3 skills/grit/test_serve.py      # 15 integrity properties
-python3 hooks/test_hook.py             # 20 hook properties
-python3 skills/grit/score.py selftest  # 21 scoring properties
+python3 skills/grit/test_serve.py      # 7 integrity properties
+python3 hooks/test_hook.py             # 26 hook properties
+python3 skills/grit/score.py selftest  # 10 scoring properties
 python3 bin/test_study_report.py       # 5 study_report properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
@@ -35,10 +35,11 @@ python3 bin/check_docs.py              # every checkable claim in the docs
 
 Specific forms of this that have each cost real time:
 
-- **Quoting a number in prose? Compute it first.** `SKILL.md` once put a tutorial's ceiling at `0.4` and kept saying so through a change that halved every weight, because that figure was never anything but a sentence. Running the model gave `0.30`. (`check_docs.py` now computes it — and it flagged this very bullet when the sentence was phrased as a live claim, which is the check working.)
+- **Quoting a number in prose? Compute it first.** `SKILL.md` once put a score ceiling at `0.4` and kept saying so through a change that halved every weight, because that figure was never anything but a sentence. Running the model gave `0.30`. (`check_docs.py` now computes it — and it flagged this very bullet when the sentence was phrased as a live claim, which is the check working.)
 - **Writing a copy-paste block? Paste it.** A README block once contained a literal `/ABSOLUTE/PATH/TO/` placeholder inside a quoted heredoc. Pasting it registered a hook pointing at a nonexistent script, and a missing script makes Python exit `2` — which both runtimes read as *block this tool call*. It broke every file write in the user's project.
 - **A browser fetch is not a DOM dump.** Headless Chrome's `--dump-dom` returns before `fetch()` resolves, so a working dashboard reads as blank. Check the endpoints with `curl`, or check the page with something that actually waits.
-- **A headless screenshot has its own clock.** `--virtual-time-budget` advances `setTimeout` far faster than a Worker thread runs, so a tutorial check costing 0.7ms trips the page's own 4-second guard and photographs as *"Timed out — possible infinite loop."* The product was fine; the camera was not. For anything behind a Worker, drive the page's functions against a stubbed DOM and assert on what they wrote — a screenshot is for reading a layout, not for deciding whether logic ran.
+- **A screenshot is for reading a layout, not for deciding whether logic ran.** Drive the page's functions against a stubbed DOM and assert on what they wrote.
+- **Simulate the whole loop, not the parts.** Every suite passed while no task done through the skill could score: the assistant's own shell calls voided each verdict, and only a sandboxed end-to-end run — real installer, registered hooks fired as the runtime fires them, the skill's commands in the order it prescribes — showed it.
 - **`str.replace` returns silently when nothing matched.** Every scripted edit asserts its anchor first: `assert old in s, "ANCHOR NOT FOUND"`. This has quietly produced no-op "fixes" more than once.
 
 **Do not deliver broken product.** If you changed installation, run the installer. If you changed the daemon, start it and hit the routes.
@@ -55,8 +56,8 @@ A comment earns its place by **changing what the next edit does**. Keep the non-
 # would never agree on the same content.
 
 # cut — this belongs in an ADR, and does
-# This was the worst gap in the loop: a user could pass the check, submit a
-# justification, be judged unsound — and end with a completely empty profile...
+# This was the worst gap in the loop: a user could pass the check, do the work
+# unaided — and end with a verdict that scored nothing...
 ```
 
 **The test files are the deliberate exception.** Every case in `test_serve.py`, `test_hook.py` and `score.py selftest` is a defect that actually shipped, and the comment names which one. That comment is the point: it is what makes a future edit that reintroduces the bug fail *loudly* instead of quietly re-earning concepts nobody earned. Never strip them for terseness.
@@ -77,6 +78,7 @@ New tests follow the same shape. A test here is a **property**, named for what b
 |---|---|
 | Conventions for working here | [AGENTS.md](AGENTS.md) |
 | What it is, how to install | [README.md](README.md) |
+| What changed, per release | [CHANGELOG.md](CHANGELOG.md) — summaries only; the reasoning lives in commits and ADRs |
 | The mechanism — processes, files, data path, invariants | [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md) |
 | The principles and what is unproven | [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) |
 | Individual decisions and rejected options | [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) |
@@ -88,7 +90,7 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 **Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead. The exception is `.sdlc/CONVENTIONS.md`, which documents the skill suite's own protocol rather than how to work here — it owns its own row, and nothing about this repository belongs in it.
 
-**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes — and the count is `len()` of the list it runs, not a number in a string: paths and links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR citations**, **section citations**, and ADR index statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
+**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks thirteen classes — and the count is `len()` of the list it runs, not a number in a string: paths and links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts (each against the suite named on its line), **hook constants**, **computed values**, **cross-doc agreement**, **ADR citations**, **section citations**, and ADR index statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The later classes exist because a prose number, a disagreement between two files, a citation to a renumbered ADR, and a "2-second" window the hook had narrowed to 250ms each slipped past everything else.
 
 ---
 
@@ -105,8 +107,8 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 This product argues that a record which can be edited proves nothing. That applies to working on it, not just to using it.
 
-- **`~/.grit/evidence.jsonl` and the ledger are append-only**, in different senses that matter when you edit either. `evidence.jsonl` is physically appended, one row per write. `ledger.json` is rewritten whole by `save_ledger`, and is append-only by *rule*: rows are added, gate 3 appends a judgment, and nothing already written is altered. The remedy for a wrong record is a new measurement, never an edit — including when the mistake was the assistant's. That is the exact case an audit trail exists for.
-- **`earned` is derived in one function and assigned nowhere.** Two code paths that both decide what a word means will eventually disagree, invisibly.
+- **`evidence.jsonl`, `tasks.jsonl` and `authorship.jsonl` are append-only.** Rows are added; nothing already written is altered or removed — including rows a later version no longer credits, which stay in the file and simply score nothing. The remedy for a wrong record is a new measurement, never an edit — including when the mistake was the assistant's. That is the exact case an audit trail exists for.
+- **A level is derived in one function and stored nowhere.** `score_concept` decides it on every read. Two code paths that both decide what a word means will eventually disagree, invisibly.
 - **A hook can never block a tool call.** Every registration carries `|| exit 0` — see [ADR 0007](.sdlc/docs/adr/0007-hooks-must-fail-open.md).
 - **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.
 
@@ -114,5 +116,4 @@ This product argues that a record which can be edited proves nothing. That appli
 
 ## 7. Open, and deliberately not decided
 
-- **Where hand-authored tutorials should live.** Today only `~/.grit/tutorials/`, which is right for the planned generate-on-demand design and wrong for the hand-authored reality — a tutorial someone wrote is not in version control anywhere. Go's call.
 - **Splitting `skills/grit/serve.py`.** It is long. Offered, not authorised; do not do it unsolicited.

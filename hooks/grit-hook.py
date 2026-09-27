@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""grit — PreToolUse hook for Write/Edit.
+"""grit — PreToolUse and PostToolUse hook for Write/Edit (and Bash, pre only).
 
-Two jobs, in order of how much they matter:
+Three jobs, in order of how much they matter:
 
   1. RECORD who wrote the code. Every time the assistant writes bytes, that is
      logged to ~/.grit/projects/<key>/authorship.jsonl. This is the only number
@@ -12,6 +12,10 @@ Two jobs, in order of how much they matter:
      session, surface the choice. Once. After that this hook is silent for the
      rest of the session, because a prompt on every edit is how a tool gets
      uninstalled.
+
+  3. CONFIRM, after. PostToolUse fires only when an edit actually ran, so an
+     `applied` row is the observation that the user approved it — which is what
+     turns "you took over" from an inference into a measurement.
 
 Design constraints this file must never violate:
   - It must never block editing because it broke. Any error at all: exit 0.
@@ -32,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -83,18 +88,28 @@ def main() -> None:
 
     tool_input = event.get("tool_input") or {}
 
-    # ── 1. Record. Always, silently. ─────────────────────────────────────────
-    _record_authorship(cwd, tool, event, tool_input)
+    if event.get("hook_event_name") == "PostToolUse":
+        if tool in WRITE_TOOLS:
+            _record_applied(cwd, tool, event, tool_input)
+        else:
+            _record_shell_result(cwd, event)
+        return
 
-    # ── 2. Ask, once per session — on real edits only. ───────────────────────
+    if tool in SHELL_TOOLS:
+        _remember_tree(cwd, event)
+
     # Bash is recorded but never prompts: most shell calls are reads and builds,
     # and a prompt on each one is how this gets uninstalled.
-    if tool not in WRITE_TOOLS:
-        return
-    if not _should_ask(event):
-        return
-    _record_offer(cwd, event, tool_input)
-    print(_compose_ask_prompt(tool_input))
+    asking = tool in WRITE_TOOLS and _should_ask(event)
+
+    # Always recorded, even when asking: PreToolUse fires before the user
+    # answers, so the edit may still be approved. `prompted` marks it so the
+    # daemon does not read the edit that raised the offer as proof the offer
+    # was declined.
+    _record_authorship(cwd, tool, event, tool_input, prompted=asking)
+    if asking:
+        _record_offer(cwd, event, tool_input)
+        print(_compose_ask_prompt(tool_input))
 
 
 def _set_project_off(off: bool, cwd: str) -> None:
@@ -143,11 +158,9 @@ def _is_duplicate(event: dict[str, Any]) -> bool:
     fast: it takes a model round-trip, which is seconds at minimum. So the two
     cases do not overlap, and the window sits in the gap.
 
-    It was 2s, which is wide enough to swallow a real retry — write a file, it
-    fails lint, write the identical content again. That silently UNDER-counts
-    assistant authorship, erring in the user's favour, which is the same defect
-    as an editable record. Dedupe must never cost a real edit; when in doubt it
-    records, and two rows is the safe direction.
+    Do not widen it: 2s once swallowed a real retry (write, fail lint, write the
+    identical content again), under-counting the assistant in the user's
+    favour. When in doubt it records; two rows is the safe direction.
     """
     key = _get_event_key(event)
     path = os.path.join(HOME_ROOT, ".last-event")
@@ -166,9 +179,22 @@ def _get_event_key(event: dict[str, Any]) -> str:
     case we are trying to detect.
     """
     tool_input = event.get("tool_input") or {}
-    body = str(tool_input.get("content") or tool_input.get("new_string", ""))
-    return "%s|%s|%s|%s" % (
+    # `command` too: without it every shell call in a session hashed alike, and
+    # distinct commands under 250ms apart — a parallel tool batch — collapsed
+    # into one row, hiding the very calls that make a verdict UNVERIFIED.
+    body = str(
+        tool_input.get("content")
+        or tool_input.get("new_string")
+        or tool_input.get("command", "")
+    )
+    # The event name is in the key: a Pre and a Post of one fast edit carry the
+    # same content and would otherwise read as one delivery seen twice.
+    # `tool_use_id`, where the runtime sends one, is the call's exact identity:
+    # two registrations of one call share it, two calls never do.
+    return "%s|%s|%s|%s|%s|%s" % (
+        event.get("hook_event_name", ""),
         event.get("session_id", ""),
+        event.get("tool_use_id", ""),
         event.get("tool_name", ""),
         tool_input.get("file_path", ""),
         hashlib.sha1(body.encode("utf-8", "replace")).hexdigest(),
@@ -176,12 +202,7 @@ def _get_event_key(event: dict[str, Any]) -> str:
 
 
 def _seen_recently(path: str, key: str, now: float) -> bool:
-    """Was this same event written within the last DEDUPE_WINDOW seconds?
-
-    Reads with a `with`, so the handle is closed before this process does
-    anything else. This runs once per tool call, in a process that is about to
-    exit — an unclosed read handle is not fatal here, but it is free to do right.
-    """
+    """Was this same event written within the last DEDUPE_WINDOW seconds?"""
     try:
         with open(path, encoding="utf-8") as fh:
             prev_key, prev_at = fh.read().rsplit(" ", 1)
@@ -201,31 +222,42 @@ def _remember_event(path: str, key: str, now: float) -> None:
 
 
 def _record_authorship(
-    cwd: str, tool: str, event: dict[str, Any], tool_input: dict[str, Any]
+    cwd: str,
+    tool: str,
+    event: dict[str, Any],
+    tool_input: dict[str, Any],
+    prompted: bool = False,
 ) -> None:
     """Append one authorship row. Recording must never cost the user an edit, so
     every failure here is swallowed."""
     try:
-        project_dir = _get_project_dir(HOME_ROOT, cwd)
-        os.makedirs(project_dir, exist_ok=True)
-        with open(
-            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
-        ) as fh:
-            fh.write(json.dumps(_compose_authorship_row(tool, event, tool_input)) + "\n")
+        row = _compose_authorship_row(tool, event, tool_input)
+        if prompted:
+            row["prompted"] = True
+        _append_project_row(cwd, row)
         _remember_project(cwd)
     except Exception:
         pass
+
+
+def _append_project_row(cwd: str, row: dict[str, Any]) -> None:
+    project_dir = _get_project_dir(HOME_ROOT, cwd)
+    os.makedirs(project_dir, exist_ok=True)
+    with open(os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
 
 
 def _compose_authorship_row(
     tool: str, event: dict[str, Any], tool_input: dict[str, Any]
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": _get_timestamp(),
         "author": "assistant",
         "tool": tool,
         "session": event.get("session_id", ""),
     }
+    if event.get("tool_use_id"):
+        row["tool_use_id"] = event["tool_use_id"]
     if tool in WRITE_TOOLS:
         row["file"] = tool_input.get("file_path", "")
         row["lines"] = _count_lines(tool_input)
@@ -291,9 +323,12 @@ def _already_asked(session_id: str) -> bool:
     marker = os.path.join(marker_dir, str(session_id)[:64].replace("/", "_"))
     if os.path.exists(marker):
         return True
-    os.makedirs(marker_dir, exist_ok=True)
-    with open(marker, "w") as fh:
-        fh.write(datetime.now(timezone.utc).isoformat())
+    try:
+        os.makedirs(marker_dir, exist_ok=True)
+        with open(marker, "w") as fh:
+            fh.write(_get_timestamp())
+    except OSError:
+        return True  # cannot remember asking -> do not ask, or it asks forever
     _prune_markers(marker_dir)
     return False
 
@@ -329,25 +364,145 @@ def _record_offer(
     in this session" is a sound inference, and it is the only evidence this
     product has that anyone ever chose to do the work."""
     try:
-        project_dir = _get_project_dir(HOME_ROOT, cwd)
-        os.makedirs(project_dir, exist_ok=True)
-        with open(
-            os.path.join(project_dir, "authorship.jsonl"), "a", encoding="utf-8"
-        ) as fh:
-            fh.write(
-                json.dumps(
-                    {
-                        "at": datetime.now(timezone.utc).isoformat(),
-                        "author": "grit",
-                        "event": "offered",
-                        "session": event.get("session_id", ""),
-                        "file": tool_input.get("file_path", ""),
-                    }
-                )
-                + "\n"
-            )
+        _append_project_row(
+            cwd,
+            {
+                "at": _get_timestamp(),
+                "author": "grit",
+                "event": "offered",
+                "session": event.get("session_id", ""),
+                "file": tool_input.get("file_path", ""),
+            },
+        )
     except Exception:
         pass
+
+
+def _record_applied(
+    cwd: str, tool: str, event: dict[str, Any], tool_input: dict[str, Any]
+) -> None:
+    """The edit ran. Authored by grit, not the assistant: the authorship row was
+    already written before the edit, and counting this one too would double it."""
+    try:
+        _append_project_row(
+            cwd,
+            {
+                "at": _get_timestamp(),
+                "author": "grit",
+                "event": "applied",
+                "tool": tool,
+                "session": event.get("session_id", ""),
+                "file": tool_input.get("file_path", ""),
+            },
+        )
+    except Exception:
+        pass
+
+
+# ── Shell calls: observe what they wrote instead of assuming ────────────────
+# An opaque shell call used to make every verdict UNVERIFIED — including the
+# assistant running the user's own tests, and running verify_edit itself, which
+# the skill tells it to do. So no task done through the skill could ever score.
+# Instead: fingerprint the working tree before the call and compare after. The
+# fingerprint is `git status` plus each listed path's size and mtime, so a
+# commit (content untouched) is not a write and a checkout that rewrites a file
+# is. A call with no after-result (no PostToolUse, not a git repo, no
+# tool_use_id) stays opaque, exactly as before.
+def _remember_tree(cwd: str, event: dict[str, Any]) -> None:
+    call = event.get("tool_use_id")
+    tree = _get_tree_fingerprint(cwd) if call else None
+    if tree is None:
+        return
+    try:
+        path = _get_pending_path(cwd, call)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(tree, fh)
+    except OSError:
+        return
+    _prune_markers(os.path.dirname(path))  # a Pre whose Post never came
+
+
+def _record_shell_result(cwd: str, event: dict[str, Any]) -> None:
+    call = event.get("tool_use_id")
+    if not call:
+        return
+    path = _get_pending_path(cwd, call)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            before = json.load(fh)
+        os.remove(path)
+    except (OSError, ValueError):
+        return  # never saw the Pre: leave the call opaque
+    after = _get_tree_fingerprint(cwd)
+    if after is None:
+        return
+    written = sorted(
+        p
+        for p in set(before) | set(after)
+        if (after[p] if p in after else _stat_path(p)) != before.get(p)
+    )
+    try:
+        _append_project_row(
+            cwd,
+            {
+                "at": _get_timestamp(),
+                "author": "grit",
+                "event": "shell-result",
+                "session": event.get("session_id", ""),
+                "tool_use_id": call,
+                "written": written,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _get_pending_path(cwd: str, call: str) -> str:
+    safe = "".join(c for c in str(call) if c.isalnum() or c in "-_")[:80]
+    return os.path.join(_get_project_dir(HOME_ROOT, cwd), "pending-shell", safe + ".json")
+
+
+def _get_tree_fingerprint(cwd: str) -> Optional[dict[str, Any]]:
+    """{absolute path: [size, mtime_ns] or None} for every path git reports as
+    changed or untracked. None outside a repository.
+    ponytail: stats only what `git status` lists, so a shell write to an
+    ignored file is invisible — ignored files are not the user's work."""
+    try:
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd, capture_output=True, text=True, timeout=2,
+        )
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "-z"],
+            cwd=cwd, capture_output=True, text=True, timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if top.returncode or status.returncode:
+        return None
+    root = top.stdout.strip()
+    tree: dict[str, Any] = {}
+    fields = status.stdout.split("\0")
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":
+            i += 1  # a rename carries its old path as the next field
+        path = os.path.join(root, entry[3:])
+        tree[path] = _stat_path(path)
+    return tree
+
+
+def _stat_path(path: str) -> Optional[list[int]]:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return [st.st_size, st.st_mtime_ns]
 
 
 def _compose_ask_prompt(tool_input: dict[str, Any]) -> str:
@@ -383,10 +538,7 @@ def _log_failure(exc: BaseException) -> None:
         with open(
             os.path.join(HOME_ROOT, "hook-errors.log"), "a", encoding="utf-8"
         ) as fh:
-            fh.write(
-                "%s  %s: %s\n"
-                % (datetime.now(timezone.utc).isoformat(), type(exc).__name__, exc)
-            )
+            fh.write("%s  %s: %s\n" % (_get_timestamp(), type(exc).__name__, exc))
     except Exception:
         pass
 
@@ -394,12 +546,19 @@ def _log_failure(exc: BaseException) -> None:
 def _get_project_dir(root: str, cwd: str) -> str:
     """Where this project's own state lives under `root` (normally HOME_ROOT).
 
-    Keyed by a hash of the real path rather than the path itself, so it is
-    always a safe, short directory name regardless of OS or path length. The
-    human-readable path lives separately, in ~/.grit/projects.json.
+    Keyed by a hash of the real path, so it is always a safe, short directory
+    name. The human-readable path lives in ~/.grit/projects.json.
+
+    verify_edit.py owns the copy the skill uses; this one exists because the
+    hook is installed apart from the skill and cannot import it. test_hook.py
+    pins that the two agree.
     """
     key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
     return os.path.join(root, "projects", key)
+
+
+def _get_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 if __name__ == "__main__":

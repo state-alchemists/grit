@@ -3,7 +3,7 @@
 
 Two runtimes, two config shapes, one job:
 
-  claude  ~/.claude/settings.json   nested: {"hooks": {"PreToolUse": [ ... ]}}
+  claude  ~/.claude/settings.json   nested: {"hooks": {"PreToolUse": [...], "PostToolUse": [...]}}
   zrb     ~/.zrb/hooks.json         flat array: [ {"name", "events", ...} ]
 
 Both files belong to the user and usually hold other things, so every edit here
@@ -22,7 +22,8 @@ import shutil
 import sys
 from typing import Any, Callable
 
-MARKER = "grit-hook.py"  # how we recognise our own entries on re-run
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills", "grit"))
+from doctor import MARKER, ZRB_HOOK_NAME  # noqa: E402 — one definition of "ours"
 
 # One runtime's writer: takes (config path, hook path, action) and returns the
 # merged config it wrote.
@@ -49,23 +50,24 @@ def main() -> None:
 
 
 def claude(path: str, hook: str, action: str) -> Any:
-    data = _load(path)
+    data = _load_with_backup(path)
     if data is None:
         data = {}
     hooks = data.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-    pre[:] = [g for g in pre if not _is_ours(g)]
-    if action == "install":
-        pre.extend(_claude_entries(guarded(hook)))
-    if not pre:
-        hooks.pop("PreToolUse", None)
+    wanted = _claude_entries(guarded(hook)) if action == "install" else {}
+    for event in CLAUDE_EVENTS:
+        groups = hooks.setdefault(event, [])
+        groups[:] = [g for g in groups if not _is_ours(g)]
+        groups.extend(wanted.get(event, []))
+        if not groups:
+            hooks.pop(event, None)
     if not hooks:
         data.pop("hooks", None)
     _write(path, data, empty={})
     return data
 
 
-def _load(path: str) -> Any:
+def _load_with_backup(path: str) -> Any:
     if not os.path.exists(path):
         return None
     shutil.copy2(path, path + ".grit-backup")
@@ -88,30 +90,29 @@ def _is_ours(group: dict[str, Any]) -> bool:
     )
 
 
-def _claude_entries(command: str) -> list[dict[str, Any]]:
-    """The two registrations we write: real edits, and shell calls.
+CLAUDE_EVENTS = ("PreToolUse", "PostToolUse")
 
-    Exec form (`args` present) is what the docs recommend whenever the hook
-    references a path, because each element is passed as one argument with no
-    quoting — shell form would break on a path containing spaces. The command
-    here is still a single shell string because it must carry the `|| exit 0`
-    guard, which exec form cannot express.
-    """
+
+def _claude_entries(command: str) -> dict[str, list[dict[str, Any]]]:
+    """The registrations we write, per event. Shell form, because only a shell
+    string can carry the `|| exit 0` guard (see guarded)."""
     handler = {"type": "command", "command": command, "timeout": 5}
-    return [
-        {
+    return {
+        "PreToolUse": [
             # Real edits: recorded exactly, and they trigger the one prompt.
-            "matcher": "Write|Edit|NotebookEdit",
-            "hooks": [handler],
-        },
-        {
+            {"matcher": "Write|Edit|NotebookEdit", "hooks": [handler]},
             # Shell calls: recorded as opaque. Without this, an assistant that
             # writes through `python3 - <<EOF` or `sed -i` leaves no trace and
             # the work reads as human-written.
-            "matcher": "Bash|PowerShell",
-            "hooks": [handler],
-        },
-    ]
+            {"matcher": "Bash|PowerShell", "hooks": [handler]},
+        ],
+        # Edits: the observation that a prompted edit was approved. Shell
+        # calls: the tree after the call, so what it wrote is seen, not assumed.
+        "PostToolUse": [
+            {"matcher": "Write|Edit|NotebookEdit", "hooks": [handler]},
+            {"matcher": "Bash|PowerShell", "hooks": [handler]},
+        ],
+    }
 
 
 def guarded(hook_path: str) -> str:
@@ -135,9 +136,8 @@ def _write(path: str, data: Any, empty: Any) -> None:
     """Write, or delete the file if we emptied something we alone populated."""
     if data == empty and os.path.exists(path):
         os.remove(path)
-        for leftover in (path + ".grit-backup",):
-            if os.path.exists(leftover):
-                os.remove(leftover)
+        if os.path.exists(path + ".grit-backup"):
+            os.remove(path + ".grit-backup")
         print("  removed     %s (it held nothing else)" % path)
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -149,20 +149,20 @@ def _write(path: str, data: Any, empty: Any) -> None:
 
 
 def zrb(path: str, hook: str, action: str) -> Any:
-    data = _load(path)
+    data = _load_with_backup(path)
     if data is None:
         data = []
     if not isinstance(data, list):
         print("  %s is not a hook array — leaving it alone" % path, file=sys.stderr)
         sys.exit(3)
 
-    data[:] = [h for h in data if h.get("name") != "grit-authorship"]
+    data[:] = [h for h in data if h.get("name") != ZRB_HOOK_NAME]
     if action == "install":
         data.append(
             {
-                "name": "grit-authorship",
+                "name": ZRB_HOOK_NAME,
                 "description": "Record who wrote the code; offer self-completion once a session.",
-                "events": ["PreToolUse"],
+                "events": ["PreToolUse", "PostToolUse"],
                 "type": "command",
                 "matchers": [
                     {

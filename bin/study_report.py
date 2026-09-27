@@ -14,8 +14,8 @@ that came strictly before it — then checks that prediction against what
 actually happened.
 
 This does not run the study. Q1/Q2/Q2b need real usage accumulated over time
-(and Q3/Q4 need a router and a tutorial-format choice that do not exist yet —
-see ADR 0011). This is the instrument, not the result: point it at a real
+(and Q3 needs randomised guidance conditions that do not exist — see ADR
+0012). This is the instrument, not the result: point it at a real
 `~/.grit` after enough work has happened, not at a fixture.
 
 NOT a pass/fail gate — it reports, it does not assert the product works, so
@@ -80,7 +80,7 @@ def q2_frequent_vs_rare(rows: list[S.EvidenceRow]) -> tuple[Bucket, Bucket]:
     """Q1's same split, run separately for concepts with >= FREQUENT_AT total
     events (in the whole log) vs. fewer. The risk ADR 0012 names is structural:
     an expert who simply has not done two scoreable tasks recently reads as
-    `recall` forever, which would show up here as the frequent set predicting
+    `practised` forever, which would show up here as the frequent set predicting
     worse than the rare set despite (presumably) equal or better real skill.
     """
     totals: dict[str, int] = defaultdict(int)
@@ -93,11 +93,11 @@ def q2_frequent_vs_rare(rows: list[S.EvidenceRow]) -> tuple[Bucket, Bucket]:
 
 def q2b_partial_vs_none(rows: list[S.EvidenceRow]) -> Bucket:
     """Does `assistance: partial` carry information `none` doesn't? Compares
-    raw pass/fail rate by assistance value — not filtered to source=repo,
-    since a tutorial (`sandbox`) can also be recorded as `partial`."""
+    raw pass/fail rate by assistance value, over rows the model credits — a
+    legacy `sandbox` row earns nothing, so it is not evidence either way."""
     out: Bucket = defaultdict(lambda: {"pass": 0, "fail": 0})
     for r in rows:
-        if r.assistance not in ("none", "partial"):
+        if r.source not in S.SOURCE_WEIGHT or r.assistance not in ("none", "partial"):
             continue
         out[r.assistance]["fail" if r.failed else "pass"] += 1
     return dict(out)
