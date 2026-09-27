@@ -49,7 +49,7 @@ And because a broken registration is invisible until someone reads JSON by hand,
 - **A hook can no longer stop anyone working.** Pinned by `hooks/test_hook.py` property 13, which asserts the unguarded form really does exit 2 (the precondition) and that the guard turns it into 0.
 - **A silently dead hook is now the failure mode** — it records nothing and says nothing. That is the correct trade against blocking, and `doctor.py` exists to make it visible on demand.
 - **The guard is in the registration, not the script**, so it protects failures the script can never catch. Anything generating a registration by another route must reproduce it; the doctor flags an unguarded entry as `risky` even when it currently works.
-- **The lesson generalises, and it is the same one as ADR 0006.** A guarantee was written in a docstring, tested only where it was already true, and shipped false. Every defect this project has had lives at the seam where code meets a real runtime: a variable expanded away by a skill loader, a relative path that only resolves in one runtime, a CSS origin conflict, an exit-code collision. Unit tests saw none of them.
+- **The lesson generalises, and it is the same one as the two-credential split** (folded into [ADR 0003](0003-repository-work-is-the-only-evidence.md)). A guarantee was written in a docstring, tested only where it was already true, and shipped false. Every defect this project has had lives at the seam where code meets a real runtime: a variable expanded away by a skill loader, a relative path that only resolves in one runtime, a CSS origin conflict, an exit-code collision. Unit tests saw none of them.
 
 ## Alternatives Considered
 
@@ -61,4 +61,4 @@ And because a broken registration is invisible until someone reads JSON by hand,
 ## Backlinks
 
 - [ADR index](README.md)
-- [ADR 0006 — Two credentials per session](0006-two-credentials-per-session.md)
+- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)

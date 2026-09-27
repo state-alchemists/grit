@@ -391,7 +391,7 @@ log "Done."
 if [[ "${uninstall}" -eq 1 && "${dry_run}" -eq 0 ]]; then
     echo
     log "Left untouched, on purpose:"
-    log "  ~/.grit — your evidence, ledger and authorship records"
+    log "  ~/.grit — your evidence, task verdicts and authorship records"
     log "           Uninstalling is not how you correct a record. Delete it"
     log "           yourself if you want it gone:  rm -rf ~/.grit"
     if [[ -f "${HOME}/.grit/daemon.json" ]]; then

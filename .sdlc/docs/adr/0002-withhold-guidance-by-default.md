@@ -3,11 +3,11 @@
 - **Status**: Accepted
 - **Date**: 2026-09-13
 - **Deciders**: Go Frendi
-- **Context tags**: expertise-reversal, scaffolding, tutorials, cognitive-load
+- **Context tags**: expertise-reversal, scaffolding, guidance, cognitive-load
 
 ## Context
 
-The product's target user is an experienced developer. It offers tutorials, probe questions, and socratic feedback — all of which are **external guidance**. A large body of evidence says guidance designed for novices becomes redundant or actively harmful for experts.
+The product's target user is an experienced developer. It offers walkthroughs ("guided"), questions, and socratic feedback — all of which are **external guidance**. A large body of evidence says guidance designed for novices becomes redundant or actively harmful for experts.
 
 Kalyuga, Ayres, Chandler & Sweller (2003), *Educational Psychologist* 38(1):23–31:
 
@@ -42,7 +42,7 @@ Concretely: no uniform step-gating, no blanket per-mission tutorials, and no con
 ## Alternatives Considered
 
 - **Step-gating at every generation** — rejected as default. Evidenced, but on novices and short tasks; contraindicated for experts at mid-range ES 1.72. Retained for concepts *measured* as unfamiliar.
-- **Uniform per-mission tutorials** — rejected. Same reason, and tutorials are the most guidance-dense artifact in the design.
+- **Uniform per-mission tutorials** — rejected. Same reason, and tutorials were the most guidance-dense artifact in the design; they have since been removed ([ADR 0003](0003-repository-work-is-the-only-evidence.md)).
 - **Withhold everything; never intervene** — rejected. Reduces the product to a mirror and discards the one mechanism with a controlled comparison behind it.
 - **Ask how much guidance the user wants** — partially adopted and bounded. Format, depth, and pace are askable; *whether* guidance is needed is measured.
 
@@ -57,5 +57,5 @@ Concretely: no uniform step-gating, no blanket per-mission tutorials, and no con
 
 - [ADR index](README.md)
 - [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
-- [ADR 0003 — Grounded on-demand tutorials](0003-grounded-on-demand-tutorials.md)
+- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)
 - [ADR 0012 — The critical path](0012-profile-validity-is-the-critical-path.md)

@@ -9,16 +9,16 @@
 
 Three separate processes write and read grit's state, and until now no document said how they connect. That gap produced real defects rather than confusion alone:
 
-- The dashboard fetched `/profile`, `/ledger` and `/tutorials` — all three structurally empty at the time — and **never read `.grit/authorship.jsonl`**, the only file with data in it. The working feature was invisible on its own dashboard. (Since [ADR 0009](0009-graded-score-from-capped-evidence.md) the profile is fed by repository work and is no longer empty.)
+- The dashboard fetched the profile, ledger and tutorial endpoints — all three structurally empty at the time — and **never read `.grit/authorship.jsonl`**, the only file with data in it. The working feature was invisible on its own dashboard. (Since [ADR 0009](0009-graded-score-from-capped-evidence.md) the profile is fed by repository work and is no longer empty.)
 - The page fetched once at load and never again, so it went stale the moment you started working.
 - The daemon ran in the foreground of whatever shell started it and died with that shell, which meant closing a terminal 404'd your own data.
 - The headline figure was a ring reading `0% proven+`, derived from a profile that nothing could populate until [ADR 0009](0009-graded-score-from-capped-evidence.md): before it, hand-written tutorials were the only evidence source, so a fresh installation showed an empty profile and the most prominent number on the page could never move.
 
 ## Decision
 
-> The dashboard is a **poll-over-files view**. The hook appends to per-project JSONL, the daemon aggregates those files per request, and the page re-fetches on tab focus and every 30 seconds. Nothing pushes. The page leads with authorship — the measurement that exists — and the tutorial panel is collapsed until a tutorial exists.
+> The dashboard is a **poll-over-files view**. The hook appends to per-project JSONL, the daemon aggregates those files per request, and the page re-fetches on tab focus and every 30 seconds. Nothing pushes. The page leads with authorship — the measurement that exists — then the tasks you took on, then proficiency.
 
-**Revised 2026-09-16 — the observation store left the repository.** The per-project files this ADR described as living in `<project>/.grit/` now live under `~/.grit/projects/<key>/`, where `<key>` is a hash of the project's real path. The decision to poll files and never push is unchanged; only the location of the files moved, so the split "observations are per project, proficiency is per person" no longer means "observations live inside your git repository." The old placement carried a tension it never named: encouraging projects to commit `.grit/` made an append-only record that can be edited a record that proves nothing, and the project's own policy forbids editing it. The only doc that advocated committing `.grit/` was a walkthrough of the original per-mission design; nothing in it survived, and it has been deleted (git keeps it). The old files are never migrated or deleted — an upgraded machine simply stops writing them, which is the decision-bearing part: the record continues uncompromised moving forward, and a wrong record is not repaired by editing the past (ADR 0006).
+**Revised 2026-09-16 — the observation store left the repository.** The per-project files this ADR described as living in `<project>/.grit/` now live under `~/.grit/projects/<key>/`, where `<key>` is a hash of the project's real path. The decision to poll files and never push is unchanged; only the location of the files moved, so the split "observations are per project, proficiency is per person" no longer means "observations live inside your git repository." The old placement carried a tension it never named: encouraging projects to commit `.grit/` made an append-only record that can be edited a record that proves nothing, and the project's own policy forbids editing it. The only doc that advocated committing `.grit/` was a walkthrough of the original per-mission design; nothing in it survived, and it has been deleted (git keeps it). The old files are never migrated or deleted — an upgraded machine simply stops writing them, which is the decision-bearing part: the record continues uncompromised moving forward, and a wrong record is not repaired by editing the past (ADR 0003).
 
 ## The data path
 
@@ -45,7 +45,7 @@ flowchart TD
         P --> R["render()"]
         R --> A1["GET /authorship ✅ who wrote what"]
         R --> A2["GET /score ✅ per-concept levels"]
-        R --> A3["GET /ledger · /tutorials ⛔ empty until a tutorial exists"]
+        R --> A3["GET /tasks ✅ each task's verdict, by week"]
         REFRESH["tab focus · 30s timer<br/>(never while onboarding is open)"] --> R
         STATUS["GET /status<br/>one call for /grit"] --> S
     end
@@ -53,7 +53,6 @@ flowchart TD
     subgraph SCORE ["④ Scoring — the product"]
         TASK["a repository task you did unaided"] --> VE["verify_edit.py<br/>git diff + authorship log"]
         VE --> EV["~/.grit/evidence.jsonl<br/>source x assistance x novelty"]
-        TUT["a completed tutorial"] -->|written on demand| EV
         EV --> LV["per-concept level<br/>learning / practised / shipped"]
     end
 
@@ -62,10 +61,9 @@ flowchart TD
     H1 --> VE
     LV --> A2
 
-    style TUT stroke-dasharray: 6 4
     style A1 fill:#2d5a3d,color:#fff
     style A2 fill:#2d5a3d,color:#fff
-    style A3 fill:#5a2d2d,color:#fff
+    style A3 fill:#2d5a3d,color:#fff
     style LV fill:#2d5a3d,color:#fff
 ```
 
@@ -83,7 +81,7 @@ flowchart TD
 - **`--daemon` detaches and `--stop` reads the pid from `daemon.json`.** A `kill -9` leaves that file pointing at a dead port, so readers must treat it as a hint.
 - **`/status` exists so `/grit` costs one request**, not several shell round-trips.
 - **The pre-2026-09-16 killswitch still works.** A `touch .grit/off` written under the old layout is honored indefinitely, so upgrading never silently re-enables a recording the user had deliberately stopped. `grit-hook.py --off` flips both markers, and `--on` clears the legacy one too — the switch must always do what the user last asked of it.
-- **The tutorial panel ships collapsed and opens itself once a tutorial exists.** Hiding it entirely would misstate the product as finished; leading with it while empty misstated it as broken.
+- **An empty panel says why it is empty.** A fresh install shows zeros; each panel names what would fill it, because a blank page reads as broken.
 
 ## Alternatives Considered
 

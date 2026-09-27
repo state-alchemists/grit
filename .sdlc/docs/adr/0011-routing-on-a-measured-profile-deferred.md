@@ -7,19 +7,19 @@
 
 ## Context
 
-The product must decide, per concept a task requires, whether the user needs a tutorial. The obvious mechanism is to ask — *"do you know token buckets?"* — and route on the answer. It is cheap, needs no instrumentation, and resolves in one conversational turn.
+The product must decide, per concept a task requires, whether the user needs guidance. The obvious mechanism is to ask — *"do you know token buckets?"* — and route on the answer. It is cheap, needs no instrumentation, and resolves in one conversational turn.
 
 The evidence says that specific question is unreliable, and unreliable in a direction that concentrates harm on the users it is meant to protect.
 
 METR (2025, RCT, 16 experienced OSS developers, 246 tasks on their own mature repos) found AI made developers **19% slower** while those developers believed it made them **20% faster** — a ~39-point gap. That is not a self-reporting accuracy problem users can fix by trying harder; it is a measurement problem.
 
-The population at risk is precisely the population that answers confidently. A senior developer who has watched AI write twelve rate limiters will say they know token buckets. The people most likely to route themselves past the tutorial are the ones who most need it.
+The population at risk is precisely the population that answers confidently. A senior developer who has watched AI write twelve rate limiters will say they know token buckets. The people most likely to route themselves past the guidance are the ones who most need it.
 
 An earlier design in this repository asked users to pick a mode — *walkthrough / attempt / solve* — at the start of each mission. Kapoor et al. (2025, N=885) measured that design: with optional guardrails and a "See Solution" bypass, **50% of students used the bypass at least once, 14% on every problem, and lower-performing students bypassed more, especially near deadlines.** Routing on a self-declared preference reproduced the failure it was meant to prevent.
 
 That settles *what not to route on*. Two questions follow: what the instrument is, and whether the profile it fills is optional.
 
-Three earlier decisions are folded together here because between them they answer one question — who needs a tutorial: *route on measured proficiency, never on self-report*; *a calibrated onboarding battery, not a set of mini-games*; and the routing requirement from *require a populated profile*. Nothing was rejected in the fold; the decay half of that profile ADR shipped separately and lives in [ADR 0010](0010-proficiency-decays-with-inactivity.md).
+Three earlier decisions are folded together here because between them they answer one question — who needs guidance: *route on measured proficiency, never on self-report*; *a calibrated onboarding battery, not a set of mini-games*; and the routing requirement from *require a populated profile*. Nothing was rejected in the fold; the decay half of that profile ADR shipped separately and lives in [ADR 0010](0010-proficiency-decays-with-inactivity.md).
 
 ## Decision
 
@@ -38,9 +38,9 @@ The battery is adaptive, spans a range of item difficulty, and has a deliberate 
 ## Rationale
 
 - **A battery is not self-report, so METR's gap does not apply to it.** It is the only mechanism in the design that can *answer* "can proficiency be inferred?" rather than assume it — which is why [ADR 0012](0012-profile-validity-is-the-critical-path.md) is stated against it.
-- **A probe question is itself a retrieval-practice event** ([Rowland 2014](https://doi.org/10.1037/a0037559), meta-analysis, **g = 0.50**), so the router does useful work even when it routes *away* from a tutorial.
+- **A probe question is itself a retrieval-practice event** ([Rowland 2014](https://doi.org/10.1037/a0037559), meta-analysis, **g = 0.50**), so the router does useful work even when it routes *away* from guidance.
 - **The disqualifying evidence is specific and directional.** METR shows the error is systematic over-confidence, not random noise — the worst possible failure mode for routing.
-- **A game measures ability in the game**, while routing needs ability in the user's workflow, and these diverge hardest for experts. A developer who has written rate limiters for a decade may do badly on a timed token-bucket puzzle because they are bored, not ignorant. A game-based battery therefore **under-rates experienced users and routes them into tutorials they do not need** — expertise reversal ([ADR 0002](0002-withhold-guidance-by-default.md)) manufactured by the onboarding step itself.
+- **A game measures ability in the game**, while routing needs ability in the user's workflow, and these diverge hardest for experts. A developer who has written rate limiters for a decade may do badly on a timed token-bucket puzzle because they are bored, not ignorant. A game-based battery therefore **under-rates experienced users and routes them into guidance they do not need** — expertise reversal ([ADR 0002](0002-withhold-guidance-by-default.md)) manufactured by the onboarding step itself.
 - **The stopping rule matters more than the format.** A battery that stops at the first failure under-rates anyone with a specific, unusual gap — a common shape for senior developers with deep expertise in one stack and none in an adjacent one.
 - **Skippable onboarding fails for a specific reason.** Kapoor et al. found the users who bypass guardrails are the lower-performing ones, especially under time pressure. The same incentive applies to skipping calibration: the confident skip first and suffer most.
 - **Unprofiled concepts need a fallback, not a block.** Blocking would make the product unusable on any new technology — exactly when a user needs it.

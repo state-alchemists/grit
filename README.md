@@ -2,11 +2,11 @@
 
 **An AI assistant that asks whether you want to do the work yourself — and teaches you when the answer is yes.**
 
-When the AI is about to do something, it asks whether you'd rather do it yourself. If you would, it names the skills involved, checks whether you actually have them, offers an interactive tutorial for the gaps, then hands over the task and asks you to justify the result. What you learn is recorded per person (`~/.grit/`), not per project, and shown on a dashboard.
+When the AI is about to do something, it asks whether you'd rather do it yourself. If you would, it names the skills involved, hands over the task, stays out of the editor, checks who actually wrote the result, and asks you to justify it. What you learn is recorded per person (`~/.grit/`), not per project, and shown on a dashboard.
 
 The name is the thesis: grit is the opposite of friction-avoidance.
 
-> **Status:** the scoring loop works end to end. Do a task yourself, pass its check, and the concept gains a level you did not award yourself; a tutorial the assistant writes against a measured gap scores too. What is missing is automation around tutorials, and — the real risk — any evidence that a `shipped` level predicts real capability. Read [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything.
+> **Status:** the scoring loop works end to end. Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is missing — the real risk — is any evidence that a `shipped` level predicts real capability. Read [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything.
 
 ---
 
@@ -56,11 +56,11 @@ Install it, then mostly forget it: the hook raises the offer the first time the 
 
 The assistant offers solo, guided or hand-off — pre-selecting *guided* only for a concept you have a recorded miss on — names the concepts it thinks the task exercises, you correct them, you write the code, your test decides, and git plus the hook log decide who typed it. Say *just do it* instead and it will, and nothing is scored. That is a legitimate answer; it only has to be a chosen one.
 
-**Learn something you have never touched.** You need something a check can decide, not a repository:
+**Learn something you have never touched.** You need something a check can decide, not an existing repository:
 
 > *I want to learn assembly — I have no experience*
 
-You get an ordered list of concepts and **one** exercise against the first, with a real check — each later exercise is written when you reach it. Exercises top out at `practised` however many you do: `shipped` needs two distinct unaided tasks in a real repository, because nothing else shows you can do it in your own stack.
+You get an ordered list of concepts, a small practice repository with the real toolchain, and **one** failing test for the first concept — each later task is set up when you reach it. From there it is the ordinary loop: you write the code, the test decides, and it scores like any repository work.
 
 Ask for something with no oracle — *teach me project management* — and it will decline, say why, and then help you normally, untracked. It cannot check it, so it will not pretend to measure it.
 
@@ -76,7 +76,7 @@ Ask for something with no oracle — *teach me project management* — and it wi
 
 | Factor | Values | Why |
 |---|---|---|
-| source | repo **0.5** · sandbox **0.2** | shipping it beats an exercise about it |
+| source | repository task **0.5** | one task is strong evidence, not proof |
 | assistance | none **1.0** · partial **0.5** · full **0.0** | if the AI wrote it, it earns nothing |
 | novelty | `1/(1+repeats)`, capped at **1.5× weight per task** | repetition is practice, not new evidence |
 
@@ -84,8 +84,8 @@ Ask for something with no oracle — *teach me project management* — and it wi
 
 ```
 1 unaided repo task              0.50  practised
-+ same tutorial ground 6x        0.80  practised   ← capped; grinding cannot prove
-+ a task the AI wrote            0.80  practised   ← contributes exactly 0
++ the same task again x6         0.75  practised   ← capped; repetition cannot prove
++ a task the AI wrote            0.75  practised   ← contributes exactly 0
 + a 2nd distinct unaided task    1.00  shipped
 ```
 
@@ -98,7 +98,7 @@ python3 skills/grit/serve.py --root ~/.grit --daemon   # detached; prints its UR
 python3 skills/grit/serve.py --root ~/.grit --stop     # stop it
 ```
 
-A fresh install shows a dashboard with **nothing in it**, which is the honest state: nothing has been measured yet. The first visit asks what to call you and offers six themes — **Dungeon**, **Terminal**, **Synthwave**, **Forest**, **Arcade**, **Paper** — applied live as you click. **Settings** also holds tutorial depth and style, whether work defaults to you writing it, and an animations toggle, all stored in `~/.grit/preferences.json`.
+A fresh install shows a dashboard with **nothing in it**, which is the honest state: nothing has been measured yet. The first visit asks what to call you and offers six themes — **Dungeon**, **Terminal**, **Synthwave**, **Forest**, **Arcade**, **Paper** — applied live as you click. **Settings** also holds whether work defaults to you writing it, and an animations toggle, all stored in `~/.grit/preferences.json`.
 
 It shows three things. **Written by the assistant** — lines, edits and shell calls per project, and how many offered sessions you took over. It never shows a percentage: your own edits are not observed, so there is no denominator. **Tasks you took on** — every handed-over task's verdict (you wrote it, the assistant helped, or unverifiable) with git's count of what changed. **Proficiency** — concept cards ordered by what needs work; every card that is not `shipped` says in one sentence what would prove it, and a card whose evidence is about to start halving says when.
 
@@ -136,7 +136,7 @@ The skill goes to `<dotdir>/skills/grit/` for every target — zrb, Claude Code,
 
 Configs are merged, never overwritten, and backed up first; every registration is guarded with `|| exit 0` so a broken hook can never block a tool call ([ADR 0007](.sdlc/docs/adr/0007-hooks-must-fail-open.md)). zrb also reads `~/.claude/settings.json`, so on a machine with both, one edit reaches the hook twice; the hook de-duplicates identical events, so authorship is still counted once.
 
-**Without the hook**, tutorials, gates, ledger, profile and dashboard all still work. Two things are lost. Authorship is no longer observed, so `verify_edit.py` reports `UNVERIFIED` rather than guessing. And the moment is gone: grit only activates when the model judges it relevant or you invoke it, which turns "you are asked every time" into an opt-in mode — the shape Kapoor et al. measured failing (N=885: 50% took the bypass, most often those who needed the friction). On a runtime without a hook, grit is a good tutor; it is not the thing it claims to be.
+**Without the hook**, the profile and dashboard still work. Two things are lost. Authorship is no longer observed, so `verify_edit.py` reports `UNVERIFIED` rather than guessing. And the moment is gone: grit only activates when the model judges it relevant or you invoke it, which turns "you are asked every time" into an opt-in mode — the shape Kapoor et al. measured failing (N=885: 50% took the bypass, most often those who needed the friction). On a runtime without a hook, grit is a checklist; it is not the thing it claims to be.
 
 **Uninstall removes grit and nothing else** — its skill directory and hook registration. Other skills, the runtime's own `skills/` directory and the rest of your `settings.json` are left alone; the file is deleted only when grit's hook was the one thing in it. **`~/.grit` survives on purpose**: uninstalling is not how you correct a record. `rm -rf ~/.grit` is yours to run, and the installer says so.
 
@@ -155,15 +155,13 @@ It fires before every tool call that can write a file — `Write`, `Edit`, `Note
 | Authorship hook and `verify_edit.py` — who wrote it, from git plus the hook log | **works** |
 | Graded scoring from real repository tasks — this is the product | **works** |
 | DIY mode — the assistant answers but does not write, enforced by the record | **works** |
-| Daemon, three-gate ledger, dashboard, themes, auto-refresh | **works** |
-| Tutorials written on demand, with optional traces, non-JS exercises and predict-before-you-run | **works** — verified end to end |
-| Automation around tutorials — batching, caching, sharing, pre-validation | **does not exist** |
+| Daemon, dashboard, per-task verdicts, weekly trend, themes, auto-refresh | **works** |
 | Router — pre-selects *guided* only where a failure was recorded | **works**, as one rule |
 | Onboarding battery and per-concept probe | **deferred** — [ADR 0011](.sdlc/docs/adr/0011-routing-on-a-measured-profile-deferred.md) |
 
-**Not planned:** team or hosted features, anything without an executable oracle, cross-user benchmarking, a tutorial library, and any claim beyond harm avoidance.
+**Not planned:** tutorials or lessons (removed — repository tasks are the only evidence), team or hosted features, anything without an executable oracle, cross-user benchmarking, and any claim beyond harm avoidance.
 
-The remaining build work is automation. The remaining *risk* is validity: nothing has tested whether a `shipped` concept predicts real capability. If it does not, the levels are noise and the design collapses to a mirror of who typed what — [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md).
+The remaining *risk* is validity: nothing has tested whether a `shipped` concept predicts real capability. If it does not, the levels are noise and the design collapses to a mirror of who typed what — [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md).
 
 ## Documentation
 

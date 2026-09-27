@@ -35,7 +35,7 @@ Those products exist. The `atrophy` CLI maintains an Elo rating per skill and ch
 ## Consequences
 
 - **Positive**: the honest floor is a product that stands alone — a mirror that works even if every intervention is cut.
-- **Negative**: measurement without remediation decays into a guilt dashboard. This is why ADR 0003 keeps tutorials attached to real work rather than dropping them.
+- **Negative**: measurement without remediation decays into a guilt dashboard. The remediation is the repository task itself, offered solo or guided — [ADR 0003](0003-repository-work-is-the-only-evidence.md).
 - **Negative**: instrumented measures are weak proxies. Acceptance rate, retention of accepted suggestions in the final diff, and prompt-to-accept latency are all confounded by task type. A single "engagement score" is a Goodhart trap and must not be built.
 - **Follow-ups**: verify that the instrumented measures are available from the assistant's actual telemetry surface. Prompt-to-accept latency may be vendor-internal rather than exposed.
 
@@ -43,4 +43,4 @@ Those products exist. The `atrophy` CLI maintains an Elo rating per skill and ch
 
 - [ADR index](README.md)
 - [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
-- [ADR 0003 — Grounded on-demand tutorials](0003-grounded-on-demand-tutorials.md)
+- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """grit scoring — turn evidence into a per-concept level.
 
-    python3 score.py record <concept> --source repo|sandbox
+    python3 score.py record <concept>
                      --assistance none|partial|full --task <id>
                      [--project DIR] [--failed] [--detail TEXT] [--root DIR]
     python3 score.py show       [--root DIR]    # the whole profile, as JSON
@@ -19,10 +19,8 @@ nothing here accumulates freely. Every event is worth
 
 and a concept's score is the capped sum. Three multipliers, three reasons:
 
-  source_weight   Real repository work (0.5) outweighs a sandbox exercise
-                  (0.2). Passing a JavaScript exercise about token buckets is
-                  not the same as shipping one in your own service, and the
-                  numbers should not pretend otherwise.
+  source_weight   Real repository work, 0.5 — the only source. Halved so one
+                  task is strong evidence but not proof.
 
   assistance      none 1.0 / partial 0.5 / full 0.0. If the assistant wrote it,
                   the concept earns nothing — that is the whole product in one
@@ -30,13 +28,12 @@ and a concept's score is the capped sum. Three multipliers, three reasons:
                   recording honestly rather than hiding.
 
   novelty         1 / (1 + times you have already produced this same evidence).
-                  The second run of one tutorial is worth half the first, the
-                  fourth a quarter. Repetition is not learning, and without this
-                  the score is farmable by replaying one exercise.
+                  The second run of one task is worth half the first, the third
+                  a third. Repetition is not learning, and without this the
+                  score is farmable by replaying one task.
 
 `shipped` additionally REQUIRES two distinct unaided repository tasks (see
-SHIPPED_NEEDS_UNAIDED_TASKS). No amount of sandbox grinding reaches it, and
-neither does repeating one real task. That rule is what stops the ladder from
+SHIPPED_NEEDS_UNAIDED_TASKS). Repeating one task never reaches it. That rule is what stops the ladder from
 being climbable without doing real work twice.
 
 Failures lower the level, ageing halves the weight, and both are deliberate: a
@@ -62,7 +59,7 @@ from typing import Any, Callable, Literal, Optional, Sequence, cast
 # the two inputs that decide what an event is worth; `Level` is what comes out.
 # Named here because a typo in a bare string ("repp") would silently score 0.0
 # through `.get(..., default)` rather than raise.
-Source = Literal["repo", "sandbox"]
+Source = Literal["repo"]
 Assistance = Literal["none", "partial", "full"]
 Level = Literal["learning", "practised", "shipped"]
 
@@ -77,7 +74,7 @@ class EvidenceRow:
     """
 
     concept: str
-    source: Source
+    source: str  # a Source, or a legacy value this model no longer credits
     assistance: Assistance
     task: str = ""
     detail: str = ""
@@ -87,14 +84,15 @@ class EvidenceRow:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "EvidenceRow":
-        """Tolerate a partial or hand-written row. Unknown `source`/
-        `assistance` values fall back to the weakest interpretation rather than
-        raising — a corrupt line must not void the whole record."""
+        """Tolerate a partial or hand-written row — a corrupt line must not void
+        the record. An unknown `assistance` reads as `full`. `source` is kept
+        verbatim: rows from the removed tutorials say "sandbox", stay in the
+        append-only file, and simply earn nothing (see score_concept)."""
         source = raw.get("source")
         assistance = raw.get("assistance")
         return cls(
             concept=str(raw.get("concept", "?")),
-            source=cast(Source, source if source in SOURCE_WEIGHT else "sandbox"),
+            source=str(source or ""),
             assistance=cast(
                 Assistance, assistance if assistance in ASSISTANCE else "full"
             ),
@@ -180,29 +178,26 @@ TaskKey = tuple[str, str, str]
 # read on one line.
 Ev = Callable[..., EvidenceRow]
 
-# Real work counts for more than an exercise. See ADR 0004: a sandbox check is
-# a weaker oracle, and the weights are that rule expressed as arithmetic.
 # Calibrated so that ONE unaided task is strong evidence but not proof — two
 # distinct ones are. A single instance is a data point, not a capability, and
 # an early draft that scored 1.0 for one task made `shipped` meaningless.
 #   1 unaided repo task      0.50  -> practised
 #   2 distinct unaided tasks 1.00  -> shipped
 #   the SAME task twice      0.75  -> still practised (novelty halves the repeat)
-#   one tutorial, ground      0.30 -> practised ceiling, never shipped
-SOURCE_WEIGHT: dict[str, float] = {"repo": 0.5, "sandbox": 0.2}
+#   the same task 20 times   0.75  -> practised ceiling (PER_TASK_CAP)
+SOURCE_WEIGHT: dict[str, float] = {"repo": 0.5}
 
 # The core claim of the product, as a number.
 ASSISTANCE: dict[str, float] = {"none": 1.0, "partial": 0.5, "full": 0.0}
 
-# A single task or tutorial can never contribute more than this multiple of its
-# own weight, however many times it is repeated. `1/(1+n)` alone was not enough:
-# it is a harmonic series, so six runs of one tutorial still added 0.49 and
-# pushed a concept to `shipped`. Repetition has to have a hard ceiling, not a
-# slow one.
+# A single task can never contribute more than this multiple of its own
+# weight, however many times it is repeated. `1/(1+n)` alone was not enough: it
+# is a harmonic series, so repeats keep adding and would eventually reach
+# `shipped`. Repetition has to have a hard ceiling, not a slow one.
 PER_TASK_CAP = 1.5
 
-# `shipped` needs TWO distinct unaided repository tasks. One is a data point that
-# a well-ground tutorial can top up past the threshold; two is a pattern.
+# `shipped` needs TWO distinct unaided repository tasks: one is a data point,
+# two is a pattern.
 SHIPPED_NEEDS_UNAIDED_TASKS = 2
 
 PRACTISED_AT = 0.30
@@ -239,14 +234,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "command", choices=["record", "show", "concepts", "level", "selftest"]
     )
     ap.add_argument("concept", nargs="*")
-    ap.add_argument("--source", choices=sorted(SOURCE_WEIGHT))
+    ap.add_argument("--source", choices=sorted(SOURCE_WEIGHT), default="repo")
     ap.add_argument("--assistance", choices=sorted(ASSISTANCE))
     ap.add_argument("--task", default="")
     ap.add_argument("--detail", default="")
     ap.add_argument(
         "--project",
         default=os.getcwd(),
-        help="repo this task belongs to; ignored for --source sandbox",
+        help="the repository this task belongs to",
     )
     ap.add_argument("--failed", action="store_true")
     ap.add_argument(
@@ -273,7 +268,7 @@ def _print_profile(root: str) -> int:
 def _record_and_report(args: argparse.Namespace, root: str) -> int:
     """Record one task, warn about a fragmenting name, and print the new score."""
     if not (len(args.concept) == 1 and args.source and args.assistance):
-        print("record needs one <concept> --source --assistance", file=sys.stderr)
+        print("record needs one <concept> and --assistance", file=sys.stderr)
         return 2
     concept = args.concept[0]
     _warn_if_name_splits_evidence(root, concept)
@@ -382,8 +377,8 @@ def profile(root: str, now: Optional[datetime] = None) -> Profile:
         concepts={c: score_concept(evs, now) for c, evs in by_concept.items()},
         note=(
             "Derived from evidence.jsonl. `shipped` requires unaided work "
-            "in a real repository — sandbox exercises alone cannot reach "
-            "it, and repeating one exercise is worth progressively less."
+            "in a real repository, twice — repeating one task is worth "
+            "progressively less."
         ),
     )
 
@@ -435,10 +430,12 @@ def get_near_duplicates(root: str, concept: str, cutoff: float = 0.82) -> list[s
 def score_concept(
     events: Sequence[EvidenceRow], now: Optional[datetime] = None
 ) -> ConceptScore:
-    """Score one concept's events. Pure: no clock, no disk, no globals."""
+    """Score one concept's events. Pure: no clock, no disk, no globals.
+    Rows from a source this model does not credit are skipped, not deleted."""
     t = _Tally()
     for ev in sorted(events, key=lambda e: e.at):
-        _fold_event(t, ev, now)
+        if ev.source in SOURCE_WEIGHT:
+            _fold_event(t, ev, now)
     return _tally_to_score(t)
 
 
@@ -482,13 +479,8 @@ def compose_task_key(source: str, project: str, task: str) -> TaskKey:
     0.75/practised instead of 1.00/shipped, silently penalising anyone who works
     across more than one codebase.
 
-    Tutorials are deliberately NOT scoped. They live in one place per person, so
-    the same exercise is the same exercise wherever you happen to run it, and
-    repeating it must decay no matter which repo you are sitting in.
     """
-    if source == "repo":
-        return (source, project or "", task or "")
-    return (source, "", task or "")
+    return (source, project or "", task or "")
 
 
 def _credit_for(
@@ -498,7 +490,7 @@ def _credit_for(
     penalty, then the per-task ceiling."""
     novelty = 1.0 / (1.0 + t.seen.get(key, 0))
     t.seen[key] = t.seen.get(key, 0) + 1
-    weight = SOURCE_WEIGHT.get(ev.source, 0.2)
+    weight = SOURCE_WEIGHT[ev.source]
     credit = weight * ASSISTANCE.get(ev.assistance, 0.0) * novelty
     if _age_days(ev.at, now) > STALE_DAYS:
         credit *= STALE_WEIGHT
@@ -657,16 +649,15 @@ def _demo() -> None:
 
 def _check_worked_examples_match_the_model(ev: Ev, now: datetime) -> None:
     # The worked examples above SOURCE_WEIGHT are read as the calibration, so
-    # they have to be the model's output and not a sentence. One of them said
-    # `~0.40` for the tutorial ceiling right through the change that halved
-    # every weight — the real figure is 0.30, and nothing was computing it.
-    # This parses the block out of this file, so prose and model cannot drift.
+    # they have to be the model's output and not a sentence. One of them kept a
+    # ceiling of `~0.40` through a change that halved every weight, because
+    # nothing computed it. This parses the block out of this file.
     repo = lambda task: ev("repo", "none", task)
     scenarios = [
         [repo("t1")],
         [repo("t1"), repo("t2")],
         [repo("t1"), repo("t1")],
-        [ev("sandbox", "none", "t1")] * 50,
+        [repo("t1")] * 20,
     ]
     with open(__file__, encoding="utf-8") as fh:
         block = re.findall(r"^#\s+\S.*?\s([0-9.]+)\s+->\s*(.+)$", fh.read(), re.M)
@@ -707,32 +698,15 @@ def _check_proven_needs_two_unaided(ev: Ev, now: datetime) -> None:
 
 
 def _check_repetition_is_capped(ev: Ev, now: datetime) -> None:
-    """Repetition decays, and one exercise can never reach `shipped`."""
+    """Repetition decays, and one task can never reach `shipped`."""
     # The same task done twice does not — novelty halves the repeat.
     r = score_concept([ev("repo", "none", "t1"), ev("repo", "none", "t1")], now)
     assert r.level == "practised", "repeating one task must not prove it: %s" % r
 
-    # Grinding ONE tutorial plateaus at PER_TASK_CAP x 0.2 = 0.30 — never
-    # reaches shipped, and never gets there without real work.
-    same = [ev("sandbox", "none", "tut-a") for _ in range(8)]
-    r = score_concept(same, now)
-    assert r.level != "shipped", "one tutorial, repeated, must not prove anything"
-    assert not r.unaided_repo
-
-    # Distinct tutorials are worth more than the same one repeated.
-    varied = score_concept([ev("sandbox", "none", "tut-%d" % i) for i in range(3)], now)
-    repeated = score_concept([ev("sandbox", "none", "tut-a") for _ in range(3)], now)
+    # Distinct tasks are worth more than the same one repeated.
+    varied = score_concept([ev("repo", "partial", "t%d" % i) for i in range(3)], now)
+    repeated = score_concept([ev("repo", "partial", "t0") for _ in range(3)], now)
     assert varied.score > repeated.score, (varied, repeated)
-
-    # A ground tutorial plus ONE real task is still not proof.
-    r = score_concept(same + [ev("repo", "none", "real-1")], now)
-    assert r.level != "shipped", "one real task must not be enough: %s" % r
-
-    # TWO distinct unaided real tasks are.
-    r = score_concept(
-        same + [ev("repo", "none", "real-1"), ev("repo", "none", "real-2")], now
-    )
-    assert r.level == "shipped" and r.unaided_tasks == 2, r
 
     # Repeating ONE repo task forever is capped and never proves anything.
     r = score_concept([ev("repo", "none", "t1") for _ in range(20)], now)
@@ -745,13 +719,13 @@ def _check_failures_and_age(ev: Ev, now: datetime) -> None:
     # A failure pushes the level back down.
     r = score_concept(
         [
-            ev("sandbox", "none", "t1"),
+            ev("repo", "none", "t1"),
             ev("repo", "none", "t2", failed=True),
             ev("repo", "none", "t3", failed=True),
         ],
         now,
     )
-    assert r.fails == 2 and r.score < 0.4, r
+    assert r.fails == 2 and r.score == 0.0 and r.level == "learning", r
 
     # Old evidence weighs half.
     fresh = score_concept(
@@ -780,7 +754,7 @@ def _check_unproven_always_names_its_next_step(ev: Ev, now: datetime) -> None:
     """
     for rows in (
         [],
-        [ev("sandbox", "none", "t1")],
+        [ev("repo", "partial", "t1")],
         [ev("repo", "none", "t1")],
         [ev("repo", "full", "t1")],
         [ev("repo", "none", "t1"), ev("repo", "none", "t2"), ev("repo", "none", "t3", failed=True)],
@@ -808,15 +782,10 @@ def _check_task_identity(ev: Ev, now: datetime) -> None:
     )
     assert r.projects == 2, r
 
-    # A tutorial is the same tutorial wherever it is run — project is ignored.
-    r = score_concept(
-        [
-            ev("sandbox", "none", "tut-a", project="/a"),
-            ev("sandbox", "none", "tut-a", project="/b"),
-        ],
-        now,
-    )
-    assert r.score < 0.4, "a repeated tutorial must decay across projects too: %s" % r
+    # Rows from the removed tutorials say "sandbox". They stay in the
+    # append-only file and earn nothing — not a pass, not a fail, not a level.
+    r = score_concept([ev("sandbox", "none", "tut-%d" % i) for i in range(12)], now)
+    assert (r.score, r.passes, r.fails, r.level) == (0.0, 0, 0, "learning"), r
 
 
 def _check_near_duplicate_detection() -> None:

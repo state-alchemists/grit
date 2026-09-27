@@ -181,9 +181,9 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;paddin
 .weeks .you{background:var(--ok)} .weeks .helped{background:var(--accent)}
 label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
   color:var(--muted);margin-bottom:7px}
-input[type=text],.field select{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);
+input[type=text]{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);
   background:var(--bg2);color:var(--fg);font:inherit}
-input[type=text]:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px}
+input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
 .themes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .swatch{border:2px solid var(--border);border-radius:12px;padding:11px;cursor:pointer;
   background:var(--bg2);text-align:left;transition:.15s}
@@ -231,10 +231,9 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
 
   <div class="panel" id="allempty" hidden style="border-color:var(--accent)">
     <h2>Start here</h2>
-    <p style="margin-top:0">Nothing has been measured yet. Two ways to change that:
-       ask the assistant for <b>a task you do yourself</b> — write the code, pass the
-       check, and the concept lands below — or ask for <b>a tutorial</b> against a
-       measured gap, which caps at <i>practised</i> but still counts.</p>
+    <p style="margin-top:0">Nothing has been measured yet. Ask the assistant for
+       <b>a task you do yourself</b> — write the code, pass the check, and the concept
+       lands below.</p>
   </div>
 
   <div class="panel">
@@ -284,13 +283,6 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <footer id="claim"></footer>
   </div>
 
-  <details class="panel" id="unbuilt">
-    <summary><b>Tutorials</b> <span id="tut-summary">— none yet</span></summary>
-    <h2>Tutorials</h2>
-    <div id="tutorials"></div>
-    <h2>Recent runs</h2>
-    <div id="ledger"></div>
-  </details>
 </div>
 
 <div class="veil" id="veil" hidden>
@@ -306,23 +298,6 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <div class="field">
       <label>Theme</label>
       <div class="themes" id="themes"></div>
-    </div>
-
-    <div class="field">
-      <label for="depth">Tutorial depth</label>
-      <select id="depth">
-        <option value="minimal">Minimal — the idea and the exercise</option>
-        <option value="standard">Standard</option>
-        <option value="deep">Deep — start from the failure, then the mechanism</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="format">Tutorial style</label>
-      <select id="format">
-        <option value="socratic">Socratic — questions that lead you there</option>
-        <option value="terse">Terse — the minimum prose</option>
-      </select>
     </div>
 
     <div class="row">
@@ -404,8 +379,6 @@ function openSetup(firstRun) {
   $("#ob-cancel").hidden = false;   // always escapable; nothing here is required
   $("#callsign").value = prefs.callsign || "";
   $("#motion").checked = prefs.motion !== false;
-  $("#depth").value = prefs.depth || "standard";
-  $("#format").value = prefs.format || "socratic";
   $("#diy").checked = prefs.default_do_it_myself !== false;
   buildSwatches(prefs.theme);
   $("#veil").hidden = false;
@@ -439,8 +412,6 @@ $("#ob-save").onclick = async () => {
       theme: picked ? picked.dataset.theme : prefs.theme,
       callsign: $("#callsign").value.trim().slice(0, 32),
       motion: $("#motion").checked,
-      depth: $("#depth").value,
-      format: $("#format").value,
       default_do_it_myself: $("#diy").checked,
       onboarded: true,
     }),
@@ -517,9 +488,9 @@ $("#concepts").onclick = async (e) => {
 
 async function render() {
   FAILED.clear();
-  const [sc, ledger, tuts, auth, work] = await Promise.all([
-    getJSON("/score", {concepts: {}, headline: {}}), getJSON("/ledger"),
-    getJSON("/tutorials"), getJSON("/authorship"), getJSON("/tasks"),
+  const [sc, auth, work] = await Promise.all([
+    getJSON("/score", {concepts: {}, headline: {}}), getJSON("/authorship"),
+    getJSON("/tasks"),
   ]);
   renderTasks(work);
 
@@ -559,8 +530,8 @@ async function render() {
   // how the level is derived, and it is shown after it rather than dropped.
   $("#claim").innerHTML =
     "No XP, no streaks, no levels to grind &mdash; every number here is a measurement, "
-    + "and measurements can go down. A tutorial pass caps at <b>Practised</b>; only real "
-    + "repository work reaches <b>Shipped</b>.";
+    + "and measurements can go down. Only repository work you did "
+    + "yourself counts, and <b>Shipped</b> takes two distinct tasks.";
   if (sc.note) {
     const note = document.createElement("div");
     note.className = "muted";
@@ -616,54 +587,11 @@ async function render() {
   for (const n of names) PREV_LEVELS[n] = concepts[n].level;
   FIRST_RENDER = false;
 
-  const rows = (tuts.tutorials || []).map(t => `<tr>
-      <td><a href="/tutorial/${encodeURIComponent(t.name)}">${escapeHtml(t.name)}</a></td>
-      <td class="${t.status === "earned" ? "pass" : "muted"}">${escapeHtml(t.status)}</td>
-      <td class="muted">${escapeHtml(t.detail)}</td></tr>`).join("");
-  // Onboarding (#firstrun) already says this once, on the very first load, and
-  // is dismissible for good. A user who dismisses it and then never acts sees
-  // nothing again — this one is data-driven instead: it shows on every visit
-  // where all three panels are still empty, and clears itself the moment any
-  // one of them has something in it.
-  $("#allempty").hidden = !(prefs.onboarded && !ap.length && !names.length && !rows
+  // Onboarding (#firstrun) says this once and is dismissible for good. This
+  // one is data-driven: it shows on every visit while all three panels are
+  // empty, and clears itself the moment any has something in it.
+  $("#allempty").hidden = !(prefs.onboarded && !ap.length && !names.length
     && !(work.tasks || []).length);
-  $("#tutorials").innerHTML = rows
-    ? `<table><tr><th>tutorial</th><th>status</th><th>detail</th></tr>${rows}</table>`
-    : `<div class="empty"><b>No tutorials yet</b>
-       There is no library to browse. A tutorial gets written for you when a gap is measured,
-       against your own code &mdash; ask for one, or do a task yourself and score it directly.
-       An empty list is the normal starting state, not a fault.</div>`;
-
-  // The summary describes what is actually on disk. Anything implying tutorials
-  // cannot exist is worse than saying nothing when one is listed right below:
-  // it tells the user their tutorial is impossible while linking to it.
-  const nTuts = (tuts.tutorials || []).length;
-  $("#tut-summary").textContent = nTuts
-    ? `— ${nTuts} ready`
-    : "— none yet";
-  // Open automatically when there is something to show, so a delivered
-  // tutorial is not hidden behind a collapsed panel the user has no reason
-  // to click. Left collapsed when empty — there is nothing to reveal.
-  // The listener is attached AFTER the programmatic open, otherwise the
-  // toggle event from our own `open = true` would count as a user toggle and
-  // re-collapse the panel on the next render.
-  const unbuilt = $("#unbuilt");
-  if (nTuts && !unbuilt.dataset.userToggled) unbuilt.open = true;
-  if (!unbuilt.dataset.bound) {
-    unbuilt.dataset.bound = "1";
-    unbuilt.addEventListener("toggle", () => {
-      unbuilt.dataset.userToggled = "1";
-    });
-  }
-
-  const led = (ledger.entries || []).slice(-12).reverse().map(e => `<tr>
-      <td>${escapeHtml(e.concept)}</td>
-      <td class="${e.earned ? "pass" : "muted"}">${e.earned ? "earned" : escapeHtml(e.judgment || "pending")}</td>
-      <td class="muted">${escapeHtml(e.routing_via || "unknown")}</td>
-      <td class="muted">${escapeHtml((e.opened || "").slice(0, 19).replace("T", " "))}</td></tr>`).join("");
-  $("#ledger").innerHTML = led
-    ? `<table><tr><th>concept</th><th>outcome</th><th>routed via</th><th>opened</th></tr>${led}</table>`
-    : `<div class="empty muted">Nothing recorded yet.</div>`;
 }
 
 // A task's verdict, not a percentage of lines: the assistant's line count is

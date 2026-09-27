@@ -16,7 +16,7 @@ A hook watches who writes code, git says what changed, and a local daemon turns 
 |---|---|---|---|
 | **the hook** (`hooks/grit-hook.py`) | milliseconds, once per tool call | `~/.grit/projects/<key>/authorship.jsonl` | talk to the daemon, block an edit |
 | **the assistant** (`skills/grit/SKILL.md`) | your session | evidence, via `score.py` | decide the check passed |
-| **the daemon** (`skills/grit/serve.py`) | until stopped | `~/.grit/*` | run your acceptance check |
+| **the daemon** (`skills/grit/serve.py`) | until stopped | `~/.grit/preferences.json`, `daemon.json` | record evidence, or run your acceptance check |
 
 They are deliberately not coupled. The hook cannot depend on the daemon running, or every file edit would inherit the daemon's uptime. The daemon cannot depend on the hook, or a fresh machine could not render a dashboard. They meet through files.
 
@@ -27,18 +27,16 @@ Everything is JSON or JSONL on disk. There is no database and no server you do n
 ```
 ~/.grit/                             everything lives here — nothing in the project
   evidence.jsonl      append-only    THE SOURCE OF TRUTH for your score
-  ledger.json         replace        tutorial sessions and their three gates
-  sessions.json       replace, 0600  live tokens; survives a daemon restart
-  preferences.json    replace        theme, callsign, tutorial depth/format, default choice — configuration only
+  preferences.json    replace        theme, callsign, default choice — configuration only
   projects.json       replace        which project paths have an authorship log
   daemon.json         replace        where the daemon is listening right now
-  tutorials/          files          hand-authored tutorial pages
 
   projects/<key>/                    per project — raw observation, keyed by a
                                       hash of the project's real path
     authorship.jsonl  append-only    every byte the assistant wrote, here, plus offered/applied events
     tasks.jsonl       append-only    each verify_edit verdict, with git's line counts
     snapshots/<task>.json            the git baseline for one handover
+    pending-shell/    markers        the tree before a shell call, until its PostToolUse
     off               marker         killswitch for this project
 
   asked/              markers        one file per session already prompted
@@ -47,7 +45,7 @@ Everything is JSON or JSONL on disk. There is no database and no server you do n
   daemon.log          append-only    stdout/stderr when started with --daemon
 ```
 
-Everything below `tutorials/` is scratch, not record: delete any of it and nothing about your score changes — including `projects/`, whose loss only means authorship history for those repos is gone, not your evidence or score.
+Only `evidence.jsonl` is the record: delete anything else and your score does not change — losing `projects/` loses authorship history and task verdicts for those repos, not your evidence or score.
 
 **`evidence.jsonl` is the only file that matters.** The score is recomputed from it on every read and stored nowhere, so there is no cached number to go stale and nothing to edit into being true. Delete it and your score is genuinely gone; edit it and you have only lied to yourself.
 
@@ -74,13 +72,12 @@ flowchart TD
 
     subgraph SCORE ["③ Evidence → level"]
         VER -->|HUMAN-WRITTEN / ASSISTED / UNVERIFIED| EV["~/.grit/evidence.jsonl"]
-        TUT["a completed tutorial<br/>(all three gates)"] --> EV
         EV --> CALC["score.py<br/>source × assistance × novelty"]
         CALC --> LV["learning → practised → shipped"]
     end
 
     subgraph VIEW ["④ Dashboard — polls, never pushed"]
-        D["serve.py --daemon"] --> API["/score /authorship /tutorials /ledger"]
+        D["serve.py --daemon"] --> API["/score /authorship /tasks /status"]
         API --> PAGE["browser, refreshes on focus + every 30s"]
     end
 
@@ -125,11 +122,11 @@ The subtle one: **an absent authorship log is ambiguous.** No hook installed mea
 
 `suggest_mode` is the router: `score.py level <concept>...` pre-selects *guided* only for a concept still at `learning` with a recorded failure, and *solo* otherwise, because guidance goes only where a gap was measured ([ADR 0002](adr/0002-withhold-guidance-by-default.md)).
 
-A task's identity is `(source, project, task)` for repository work and `(source, task)` for tutorials — repository task ids are per-project sequences, so `001` in two repos is two tasks, while a tutorial is the same exercise wherever it runs. Full reasoning and the calibration errors that were caught by running it: [ADR 0009](adr/0009-graded-score-from-capped-evidence.md).
+A task's identity is `(source, project, task)` — task ids are per-project sequences, so `001` in two repos is two tasks. Evidence rows from the removed tutorials say `"source": "sandbox"`; they stay in the append-only file, and `score_concept` skips any source it does not credit. Full reasoning and the calibration errors that were caught by running it: [ADR 0009](adr/0009-graded-score-from-capped-evidence.md).
 
 ### `skills/grit/serve.py` — the daemon
 
-Localhost only, no cross-origin. Three responsibilities: serve the dashboard and tutorials, own the three-gate ledger, and expose the score.
+Localhost only, no cross-origin. It serves the dashboard and read-only views over the files the other tools write; its only write is `preferences.json`. It records no evidence.
 
 | Route | Returns |
 |---|---|
@@ -138,15 +135,8 @@ Localhost only, no cross-origin. Three responsibilities: serve the dashboard and
 | `/score`, `/profile` | per-concept levels |
 | `/authorship` | assistant-written lines per project |
 | `/tasks` | each handed-over task's latest verdict, with git's line counts, totals per verdict, and the last 8 weeks of verdicts |
-| `/tutorials`, `/ledger`, `/preferences`, `/themes`, `/health` | as named |
-| `POST /tutorial/<report-token>/{check,justification}` | gates 1 and 2 — the justification carries the user's `prediction` alongside their `answer`, so gate 3 judges both |
-| `POST /judgment/<judge-token>` | gate 3 |
-
-**Gate 3, in practice.** `serve.py --root ~/.grit --pending` lists every justification awaiting a verdict — prediction, answer, and the code the page reported with gate 1 — each with the judge command for that session. Gate 1's row is labelled `reported-by-page`: the check ran in the browser, and this process executed nothing. Reloading a tutorial reuses a session nothing has been reported to, instead of minting another.
-
-**Two credentials per session.** The page gets a *report* token and can only report gates 1 and 2. The *judge* token is printed to the daemon's terminal and never reaches the browser; `POST /tutorial/<report>/judgment` returns `403` on purpose. Without the split the page could award itself a pass with one `fetch()` — [ADR 0006](adr/0006-two-credentials-per-session.md).
-
-**Gate 3 appends.** The first verdict stands; later calls return `409` with the standing verdict and the full history, and change nothing. A verdict you can overwrite is not evidence.
+| `/preferences`, `/themes`, `/health` | as named |
+| `POST /preferences` | the one write — theme, callsign, motion, default choice |
 
 Editing `serve.py` needs a daemon restart. Editing `dashboard.html` does not.
 
@@ -158,18 +148,6 @@ The concept grid is ordered by what needs work — learning first, highest score
 
 It **polls**: the writer is a hook process that exits immediately and has nowhere to hold a connection, so files are the handoff and a 30-second timer plus a focus listener is the refresh. It also **degrades per panel** — one failing endpoint used to reject the whole `Promise.all` and blank every tile at its static zero, which made the product look entirely broken when one route was. Now a dead endpoint names itself in the header.
 
-### `skills/grit/tutorial.template.html` — the page the assistant fills in
-
-One file, no build step, no network beyond loopback. The check and the tool's own self-test are `text/plain` blocks evaluated together at worker scope, so the self-test can reach whatever the check defines and the user's code can never see the tests.
-
-Three capabilities are declared by the authored check rather than switched on centrally, which is what keeps a tutorial written before any of them existed working unchanged:
-
-| Declared by | Effect |
-|---|---|
-| `frames` on the check's return | the page renders a step-through above the result — `{label, cells, note}` per step, changed cells highlighted. Data only: the worker cannot hand the page markup |
-| `IS_SOURCE_TEXT` at worker scope | the page stops requiring a JS function called `solve` and passes the textarea verbatim, so the exercise can be assembly, a query, a grammar. The *check* is still JS |
-| the `PREDICTION` slot | a prediction asked before the first run and locked by it. It rides along with gate 2 and is judged with the answer — the one field on the page that cannot be written after seeing the result |
-
 ### The supporting scripts
 
 - **`doctor.py`** — enumerates every place a hook registration can hide, resolves the script path, and *runs each command* to see whether it returns the blocking exit code. Ships inside the skill so `/grit` works without the repo.
@@ -180,12 +158,10 @@ Three capabilities are declared by the authored check rather than switched on ce
 
 Break any of these and the record stops meaning anything. Each has a test, and each was once broken.
 
-1. **`earned` is derived, never assigned** — all three gates present, check still passing, judgment sound. One function, one place.
-2. **No raw credential enters the ledger.** `/ledger` is readable; rows carry an opaque `sid`.
-3. **A failure is recorded, not swallowed.** A judged-unsound tutorial writes a failure event. It used to write nothing, so a failed attempt left an empty profile.
-4. **`--failed` reaches the file.** It once mutated the returned dict *after* the write, so a recorded failure scored as a pass — raising the number it was meant to lower.
-5. **A hook can never block an edit.**
-6. **Gate 3 appends.**
-7. **Every endpoint the dashboard fetches must answer.** The test derives the list from `dashboard.html` itself, so it cannot drift.
+1. **A level is derived, never stored** — `score_concept`, on every read. One function, one place.
+2. **`--failed` reaches the file.** It once mutated the returned dict *after* the write, so a recorded failure scored as a pass — raising the number it was meant to lower.
+3. **A hook can never block an edit.**
+4. **A shell call voids a task only if it was not observed.** One observed writing nothing is harmless; one observed writing files is the assistant's.
+5. **Every endpoint the dashboard fetches must answer.** The test derives the list from `dashboard.html` itself, so it cannot drift.
 
 The self-checks that pin these, and how to run them, are in [AGENTS.md §2](../../AGENTS.md#2-run-it-do-not-reason-about-it). What is deliberately not built is [DESIGN.md §2](DESIGN.md#2-scope).
