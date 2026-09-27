@@ -1,6 +1,8 @@
-# ADR 0011 — Routing on a measured profile, and why it is deferred
+# ADR-0011: Routing on a measured profile, and why it is deferred
 
-- **Status**: Accepted — **partly built**: a default from measured failures; no battery, no probe
+## Status
+Accepted — **partly built**: a default from measured failures; no battery, no probe
+
 - **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: routing, measurement, profiling, onboarding, psychometrics, expertise-reversal
@@ -19,7 +21,7 @@ An earlier design in this repository asked users to pick a mode — *walkthrough
 
 That settles *what not to route on*. Two questions follow: what the instrument is, and whether the profile it fills is optional.
 
-Three earlier decisions are folded together here because between them they answer one question — who needs guidance: *route on measured proficiency, never on self-report*; *a calibrated onboarding battery, not a set of mini-games*; and the routing requirement from *require a populated profile*. Nothing was rejected in the fold; the decay half of that profile ADR shipped separately and lives in [ADR 0010](0010-proficiency-decays-with-inactivity.md).
+Three earlier decisions are folded together here because between them they answer one question — who needs guidance: *route on measured proficiency, never on self-report*; *a calibrated onboarding battery, not a set of mini-games*; and the routing requirement from *require a populated profile*. Nothing was rejected in the fold; the decay half of that profile ADR shipped separately and lives in [ADR 0010](ADR-0010-proficiency-decays-with-inactivity.md).
 
 ## Decision
 
@@ -37,10 +39,10 @@ The battery is adaptive, spans a range of item difficulty, and has a deliberate 
 
 ## Rationale
 
-- **A battery is not self-report, so METR's gap does not apply to it.** It is the only mechanism in the design that can *answer* "can proficiency be inferred?" rather than assume it — which is why [ADR 0012](0012-profile-validity-is-the-critical-path.md) is stated against it.
+- **A battery is not self-report, so METR's gap does not apply to it.** It is the only mechanism in the design that can *answer* "can proficiency be inferred?" rather than assume it — which is why [ADR 0012](ADR-0012-profile-validity-is-the-critical-path.md) is stated against it.
 - **A probe question is itself a retrieval-practice event** ([Rowland 2014](https://doi.org/10.1037/a0037559), meta-analysis, **g = 0.50**), so the router does useful work even when it routes *away* from guidance.
 - **The disqualifying evidence is specific and directional.** METR shows the error is systematic over-confidence, not random noise — the worst possible failure mode for routing.
-- **A game measures ability in the game**, while routing needs ability in the user's workflow, and these diverge hardest for experts. A developer who has written rate limiters for a decade may do badly on a timed token-bucket puzzle because they are bored, not ignorant. A game-based battery therefore **under-rates experienced users and routes them into guidance they do not need** — expertise reversal ([ADR 0002](0002-withhold-guidance-by-default.md)) manufactured by the onboarding step itself.
+- **A game measures ability in the game**, while routing needs ability in the user's workflow, and these diverge hardest for experts. A developer who has written rate limiters for a decade may do badly on a timed token-bucket puzzle because they are bored, not ignorant. A game-based battery therefore **under-rates experienced users and routes them into guidance they do not need** — expertise reversal ([ADR 0002](ADR-0002-withhold-guidance-by-default.md)) manufactured by the onboarding step itself.
 - **The stopping rule matters more than the format.** A battery that stops at the first failure under-rates anyone with a specific, unusual gap — a common shape for senior developers with deep expertise in one stack and none in an adjacent one.
 - **Skippable onboarding fails for a specific reason.** Kapoor et al. found the users who bypass guardrails are the lower-performing ones, especially under time pressure. The same incentive applies to skipping calibration: the confident skip first and suffer most.
 - **Unprofiled concepts need a fallback, not a block.** Blocking would make the product unusable on any new technology — exactly when a user needs it.
@@ -50,35 +52,43 @@ The battery is adaptive, spans a range of item difficulty, and has a deliberate 
 - **Ask the user directly and trust the answer** — rejected. This is the METR case. It routes the most at-risk users past the intervention, silently, and the error is invisible by construction.
 - **Mini-games as the instrument** — rejected, for the under-rating argument above. Retained as presentation only: a battery can be paced, scored and made satisfying without the score being a game score.
 - **A fixed linear test** — rejected. Slow for experts, discouraging for beginners, biased at both ends.
-- **Infer proficiency purely from instrumented signal, never ask** — rejected as the *primary* mechanism, not on principle but because inference is unvalidated. Retained as the long-run target — and note that [ADR 0009](0009-graded-score-from-capped-evidence.md) subsequently made a version of it the *only* mechanism.
+- **Infer proficiency purely from instrumented signal, never ask** — rejected as the *primary* mechanism, not on principle but because inference is unvalidated. Retained as the long-run target — and note that [ADR 0009](ADR-0009-graded-score-from-capped-evidence.md) subsequently made a version of it the *only* mechanism.
 - **Work-derived profiling only, no battery** — rejected as the sole mechanism: honest but slow, and empty at first run, precisely when routing is needed. **This is the option that shipped**, once ADR 0009 established that an empty profile at first run is acceptable because nothing routes on it.
 - **Optional profile, trust claims when absent** — rejected. Reintroduces the self-report problem for exactly the at-risk population.
 - **Block routing until the full taxonomy is profiled** — rejected. Punishes users for working in a technology the taxonomy has not seen.
-- **No onboarding; probe every concept every time** — rejected. Probes are themselves guidance ([ADR 0002](0002-withhold-guidance-by-default.md)), so this maximises the harm case it was meant to avoid.
+- **No onboarding; probe every concept every time** — rejected. Probes are themselves guidance ([ADR 0002](ADR-0002-withhold-guidance-by-default.md)), so this maximises the harm case it was meant to avoid.
 
 ## Why this is deferred
 
-[ADR 0009](0009-graded-score-from-capped-evidence.md) made repository work an evidence source, so a profile can be populated by doing real work with the assistant kept out of the editor. That removed the reason the battery had to exist *before anything could be measured* — which was the only thing forcing it to be built first.
+[ADR 0009](ADR-0009-graded-score-from-capped-evidence.md) made repository work an evidence source, so a profile can be populated by doing real work with the assistant kept out of the editor. That removed the reason the battery had to exist *before anything could be measured* — which was the only thing forcing it to be built first.
 
 What the deferral costs, stated plainly rather than discovered later:
 
-- **The router is a single rule.** `score.py level` pre-selects *guided* only where a failure was recorded on a concept still at `learning`, and *solo* everywhere else (`suggest_mode`). It routes on measurement and never on a claim, as decided above — but with no probe, an unprofiled concept falls to the no-guidance default of [ADR 0002](0002-withhold-guidance-by-default.md) rather than to a question. It only pre-selects: the three-way offer is still made every time.
+- **The router is a single rule.** `score.py level` pre-selects *guided* only where a failure was recorded on a concept still at `learning`, and *solo* everywhere else (`suggest_mode`). It routes on measurement and never on a claim, as decided above — but with no probe, an unprofiled concept falls to the no-guidance default of [ADR 0002](ADR-0002-withhold-guidance-by-default.md) rather than to a question. It only pre-selects: the three-way offer is still made every time.
 - **There is no probe.** An unprofiled concept produces no question, so the retrieval-practice benefit above is not being collected.
 - **First run is empty and stays empty until you do work.** That is honest, and it is worse as a demo than a battery would be.
 
 The decision stands as the design position. If more routing is built, it is built this way.
 
 ## Consequences
+### Positive
+- Routing errors would be visible and correctable rather than silent, and the battery would produce a real datum against which [ADR 0012](ADR-0012-profile-validity-is-the-critical-path.md) could be run.
+### Negative
+- Building it turns a coding assistant into an exam you sit first. This friction is unavoidable given the decision above, and it is real.
+- The battery and probes are **external guidance**, and the expertise reversal effect ([ADR 0002](ADR-0002-withhold-guidance-by-default.md)) says guidance is costly for experts. A battery reduces probe frequency; it does not eliminate the cost.
+- **validity is unproven.** A battery in version control is *reproducible*, not *accurate* — [ADR 0012](ADR-0012-profile-validity-is-the-critical-path.md).
 
-- **Positive**: routing errors would be visible and correctable rather than silent, and the battery would produce a real datum against which [ADR 0012](0012-profile-validity-is-the-critical-path.md) could be run.
-- **Negative**: building it turns a coding assistant into an exam you sit first. This friction is unavoidable given the decision above, and it is real.
-- **Negative**: the battery and probes are **external guidance**, and the expertise reversal effect ([ADR 0002](0002-withhold-guidance-by-default.md)) says guidance is costly for experts. A battery reduces probe frequency; it does not eliminate the cost.
-- **Negative**: **validity is unproven.** A battery in version control is *reproducible*, not *accurate* — [ADR 0012](0012-profile-validity-is-the-critical-path.md).
+## Implements Rules
+- None — no rules are defined for this project yet.
 
-## Backlinks
+## Verification
+- `python3 skills/grit/score.py selftest` — `_check_guidance_needs_a_measured_gap` pins the one rule that is built.
+- None for the battery and the probe: they are unbuilt.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0002 — Withhold guidance by default](0002-withhold-guidance-by-default.md)
-- [ADR 0009 — A graded score](0009-graded-score-from-capped-evidence.md) — what deferred this
-- [ADR 0010 — Proficiency decays](0010-proficiency-decays-with-inactivity.md) — the half that shipped
-- [ADR 0012 — Profile validity is the critical path](0012-profile-validity-is-the-critical-path.md)
+- [ADR 0002 — Withhold guidance by default](ADR-0002-withhold-guidance-by-default.md)
+- [ADR 0009 — A graded score](ADR-0009-graded-score-from-capped-evidence.md) — what deferred this
+- [ADR 0010 — Proficiency decays](ADR-0010-proficiency-decays-with-inactivity.md) — the half that shipped
+- [ADR 0012 — Profile validity is the critical path](ADR-0012-profile-validity-is-the-critical-path.md)

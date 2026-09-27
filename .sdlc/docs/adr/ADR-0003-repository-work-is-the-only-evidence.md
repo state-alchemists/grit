@@ -1,6 +1,8 @@
-# ADR 0003 — Repository work is the only evidence; tutorials are removed
+# ADR-0003: Repository work is the only evidence; tutorials are removed
 
-- **Status**: Accepted — absorbs the superseded *Grounded on-demand tutorials*, *Interactive sandbox tutorials*, *Completion via a local daemon with three gates*, and *Two credentials per session* (formerly 0003–0006)
+## Status
+Accepted — absorbs the superseded *Grounded on-demand tutorials*, *Interactive sandbox tutorials*, *Completion via a local daemon with three gates*, and *Two credentials per session* (formerly 0003–0006)
+
 - **Date**: 2026-09-27
 - **Deciders**: Go Frendi
 - **Context tags**: evidence, tutorials, scope, simplicity
@@ -25,7 +27,7 @@ Measured, not argued:
 
 - **One verified path beats two half-verified ones.** The repository path has an execution the tool can see (git), an author the hook can see, and a check the user runs in their own toolchain. The tutorial path had a check the daemon could not see and a verdict delivered by hand.
 - **The removed machinery defended only itself.** The ledger, the three gates, the report and judge tokens, `sessions.json`, the page template and its Worker existed to make tutorials trustworthy. None of it touched repository work.
-- **The pedagogy survives without the page.** Retrieval practice with feedback ([Rowland 2014](https://doi.org/10.1037/a0037559), g = 0.50) is what a repository task with a failing test already is. The "guided" option — walk me through it, you still write it — is the adaptive, on-a-measured-gap guidance [ADR 0002](0002-withhold-guidance-by-default.md) calls for, without a second artifact.
+- **The pedagogy survives without the page.** Retrieval practice with feedback ([Rowland 2014](https://doi.org/10.1037/a0037559), g = 0.50) is what a repository task with a failing test already is. The "guided" option — walk me through it, you still write it — is the adaptive, on-a-measured-gap guidance [ADR 0002](ADR-0002-withhold-guidance-by-default.md) calls for, without a second artifact.
 
 ## Alternatives Considered
 
@@ -36,16 +38,24 @@ Measured, not argued:
 - **Fix the tutorial path and keep it** — rejected. `--pending`, session reuse and an honest gate-1 label were built and worked in simulation. They made a path nobody used correct, and left a check the daemon could never see.
 
 ## Consequences
-
-- **Beginners are served through a practice repository.** Two distinct unaided tasks there reach `shipped`, although the test was written by the assistant. That is a deliberate, unvalidated consequence ([DESIGN.md §4](../DESIGN.md), item 6).
+### Positive
 - **Legacy evidence stays and scores nothing.** Rows with `"source": "sandbox"` remain in the append-only file; `score_concept` skips any source it does not credit.
 - **`assistance: partial` now means one thing** — the user chose *guided*.
-- **The justification is judged in conversation and not recorded as its own gate.** Its only trace is whether the task was recorded, and as `--failed` or not. The judgment is as unvalidated as it was ([DESIGN.md §4](../DESIGN.md), item 4).
 - **Much less to break.** `serve.py` went from 1,528 lines to about 800; the tutorial template, the ledger, sessions and eleven daemon properties that tested them are gone with the code they covered.
 - **Numbers 0004–0006 are not reused.** Their decisions live above; git keeps the originals.
+### Negative
+- **Beginners are served through a practice repository.** Two distinct unaided tasks there reach `shipped`, although the test was written by the assistant. That is a deliberate, unvalidated consequence ([DESIGN.md §4](../DESIGN.md), item 6).
+- **The justification is judged in conversation and not recorded as its own gate.** Its only trace is whether the task was recorded, and as `--failed` or not. The judgment is as unvalidated as it was ([DESIGN.md §4](../DESIGN.md), item 4).
 
-## Backlinks
+## Implements Rules
+- None — no rules are defined for this project yet.
+
+## Verification
+- `python3 skills/grit/score.py selftest` — `_check_task_identity`: legacy `sandbox` rows earn nothing, not a pass, not a fail, not a level.
+- `bin/test_study_report.py` — `_check_q1_ignores_assisted_and_legacy_events`: the study analysis ignores them too.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0002 — Withhold guidance by default](0002-withhold-guidance-by-default.md)
-- [ADR 0009 — A graded score, derived from capped evidence](0009-graded-score-from-capped-evidence.md)
+- [ADR 0002 — Withhold guidance by default](ADR-0002-withhold-guidance-by-default.md)
+- [ADR 0009 — A graded score, derived from capped evidence](ADR-0009-graded-score-from-capped-evidence.md)

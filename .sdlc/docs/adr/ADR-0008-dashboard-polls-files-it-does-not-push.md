@@ -1,6 +1,8 @@
-# ADR 0008 — The dashboard polls files; nothing pushes, and the page leads with what works
+# ADR-0008: The dashboard polls files; nothing pushes, and the page leads with what works
 
-- **Status**: Accepted
+## Status
+Accepted
+
 - **Date**: 2026-09-13 (revised 2026-09-16)
 - **Deciders**: Go Frendi
 - **Context tags**: dashboard, data-flow, ux, availability
@@ -9,10 +11,10 @@
 
 Three separate processes write and read grit's state, and until now no document said how they connect. That gap produced real defects rather than confusion alone:
 
-- The dashboard fetched the profile, ledger and tutorial endpoints — all three structurally empty at the time — and **never read `.grit/authorship.jsonl`**, the only file with data in it. The working feature was invisible on its own dashboard. (Since [ADR 0009](0009-graded-score-from-capped-evidence.md) the profile is fed by repository work and is no longer empty.)
+- The dashboard fetched the profile, ledger and tutorial endpoints — all three structurally empty at the time — and **never read `.grit/authorship.jsonl`**, the only file with data in it. The working feature was invisible on its own dashboard. (Since [ADR 0009](ADR-0009-graded-score-from-capped-evidence.md) the profile is fed by repository work and is no longer empty.)
 - The page fetched once at load and never again, so it went stale the moment you started working.
 - The daemon ran in the foreground of whatever shell started it and died with that shell, which meant closing a terminal 404'd your own data.
-- The headline figure was a ring reading `0% proven+`, derived from a profile that nothing could populate until [ADR 0009](0009-graded-score-from-capped-evidence.md): before it, hand-written tutorials were the only evidence source, so a fresh installation showed an empty profile and the most prominent number on the page could never move.
+- The headline figure was a ring reading `0% proven+`, derived from a profile that nothing could populate until [ADR 0009](ADR-0009-graded-score-from-capped-evidence.md): before it, hand-written tutorials were the only evidence source, so a fresh installation showed an empty profile and the most prominent number on the page could never move.
 
 ## Decision
 
@@ -75,13 +77,14 @@ flowchart TD
 - **An `offered` row makes the prompt mean something.** Sessions where the choice was offered and no assistant edit followed are the only evidence this product has that anyone chose to do the work. It is an inference, not an observation — the runtime does not report the answer back — and is labelled as such. The edit that *raised* the offer is flagged `prompted` and does not count as "followed": without that, every offered session contained an edit and the count was 0 on every machine. A `PostToolUse` registration now records an `applied` row when an edit really ran, so the approved-or-declined question is observed wherever it is installed and inferred only where it is not.
 
 ## Consequences
-
-- **Up to 30 seconds of staleness**, and none while the setup dialog is open — re-rendering under someone typing their name is worse than stale data.
-- **`serve.py` must be restarted after editing it**; `dashboard.html` is read per request and needs no restart. This bit during development and is worth remembering.
-- **`--daemon` detaches and `--stop` reads the pid from `daemon.json`.** A `kill -9` leaves that file pointing at a dead port, so readers must treat it as a hint.
+### Positive
 - **`/status` exists so `/grit` costs one request**, not several shell round-trips.
 - **The pre-2026-09-16 killswitch still works.** A `touch .grit/off` written under the old layout is honored indefinitely, so upgrading never silently re-enables a recording the user had deliberately stopped. `grit-hook.py --off` flips both markers, and `--on` clears the legacy one too — the switch must always do what the user last asked of it.
 - **An empty panel says why it is empty.** A fresh install shows zeros; each panel names what would fill it, because a blank page reads as broken.
+### Negative
+- **Up to 30 seconds of staleness**, and none while the setup dialog is open — re-rendering under someone typing their name is worse than stale data.
+- **`serve.py` must be restarted after editing it**; `dashboard.html` is read per request and needs no restart. This bit during development and is worth remembering.
+- **`--daemon` detaches and `--stop` reads the pid from `daemon.json`.** A `kill -9` leaves that file pointing at a dead port, so readers must treat it as a hint.
 
 ## Alternatives Considered
 
@@ -90,9 +93,16 @@ flowchart TD
 - **Hide the unbuilt panels entirely** — rejected; see Consequences.
 - **Keep the ring, showing authorship as a percentage** — rejected. There is no denominator: the human's own edits are not observed. `verify_edit.py` gets a real one per task from git; the dashboard must not invent one.
 
-## Backlinks
+## Implements Rules
+- None — no rules are defined for this project yet.
+
+## Verification
+- `skills/grit/test_serve.py` — `_property_dashboard_endpoints_answer` (the list is derived from `dashboard.html`), `_property_port_is_published`, `_property_detached_daemon_starts_on_a_fresh_root`.
+- `hooks/test_hook.py` — `_property_legacy_off_marker_still_silences`, `_property_off_switch_cli`.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0010 — Proficiency decays](0010-proficiency-decays-with-inactivity.md)
-- [ADR 0001 — Measure the effect](0001-measure-the-effect.md)
-- [ADR 0007 — Hooks must fail open](0007-hooks-must-fail-open.md)
+- [ADR 0010 — Proficiency decays](ADR-0010-proficiency-decays-with-inactivity.md)
+- [ADR 0001 — Measure the effect](ADR-0001-measure-the-effect.md)
+- [ADR 0007 — Hooks must fail open](ADR-0007-hooks-must-fail-open.md)

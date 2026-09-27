@@ -1,6 +1,8 @@
-# ADR 0001 — Measure the effect; make the invisible visible
+# ADR-0001: Measure the effect; make the invisible visible
 
-- **Status**: Accepted
+## Status
+Accepted
+
 - **Date**: 2026-09-13
 - **Deciders**: Go Frendi
 - **Context tags**: measurement, dashboard, self-perception, mirror
@@ -33,14 +35,23 @@ Those products exist. The `atrophy` CLI maintains an Elo rating per skill and ch
 - **Vendor-style adoption analytics** — rejected. DX, Jellyfish, LinearB, and Swarmia report AI adoption and throughput; none reports skill or learning.
 
 ## Consequences
+### Positive
+- The honest floor is a product that stands alone — a mirror that works even if every intervention is cut.
+### Negative
+- Measurement without remediation decays into a guilt dashboard. The remediation is the repository task itself, offered solo or guided — [ADR 0003](ADR-0003-repository-work-is-the-only-evidence.md).
+- Instrumented measures are weak proxies. Acceptance rate, retention of accepted suggestions in the final diff, and prompt-to-accept latency are all confounded by task type. A single "engagement score" is a Goodhart trap and must not be built.
+### Follow-ups
+- Verify that the instrumented measures are available from the assistant's actual telemetry surface. Prompt-to-accept latency may be vendor-internal rather than exposed.
 
-- **Positive**: the honest floor is a product that stands alone — a mirror that works even if every intervention is cut.
-- **Negative**: measurement without remediation decays into a guilt dashboard. The remediation is the repository task itself, offered solo or guided — [ADR 0003](0003-repository-work-is-the-only-evidence.md).
-- **Negative**: instrumented measures are weak proxies. Acceptance rate, retention of accepted suggestions in the final diff, and prompt-to-accept latency are all confounded by task type. A single "engagement score" is a Goodhart trap and must not be built.
-- **Follow-ups**: verify that the instrumented measures are available from the assistant's actual telemetry surface. Prompt-to-accept latency may be vendor-internal rather than exposed.
+## Implements Rules
+- None — no rules are defined for this project yet.
 
-## Backlinks
+## Verification
+- Review only: whether measurement stays the foundation is a design judgement no check can assert.
+- The measurements it rests on are pinned: `hooks/test_hook.py` `_property_records_every_edit` and `_property_verify_edit_distinguishes_outcomes`; `skills/grit/test_serve.py` `_property_dashboard_endpoints_answer`.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
-- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)
+- [ADR 0011 — Routing, deferred](ADR-0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0003 — Repository work is the only evidence](ADR-0003-repository-work-is-the-only-evidence.md)

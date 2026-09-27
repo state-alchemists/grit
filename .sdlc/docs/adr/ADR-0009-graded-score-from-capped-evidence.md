@@ -1,6 +1,8 @@
-# ADR 0009 — A graded score, derived from capped evidence
+# ADR-0009: A graded score, derived from capped evidence
 
-- **Status**: Accepted — absorbs the superseded *Profile derived from the ledger*
+## Status
+Accepted — absorbs the superseded *Profile derived from the ledger*
+
 - **Date**: 2026-09-13
 - **Deciders**: Go Frendi
 - **Context tags**: scoring, proficiency, anti-farming, scope
@@ -11,7 +13,7 @@ The product had no way to answer *"what can I do?"*. An earlier decision — *th
 
 That earlier decision is superseded and its file is gone; what it decided is recorded below as a rejected alternative, and the parts of it that survive are named in the rationale.
 
-The scope was then set explicitly: a score that proves capability, earned from a real repository task (and, until [ADR 0003](0003-repository-work-is-the-only-evidence.md) removed them, a tutorial); full credit for unaided work, partial when the assistant helped but the human still wrote it, none when the assistant wrote it; and repeating the same tutorial must not keep paying.
+The scope was then set explicitly: a score that proves capability, earned from a real repository task (and, until [ADR 0003](ADR-0003-repository-work-is-the-only-evidence.md) removed them, a tutorial); full credit for unaided work, partial when the assistant helped but the human still wrote it, none when the assistant wrote it; and repeating the same tutorial must not keep paying.
 
 That last constraint is what makes a score defensible here at all. Earlier documents rejected scoring outright — *"a score people can farm makes the record say whatever they want"* — and that objection is correct about **accumulated** scores. It is not an objection to a score **derived from evidence with diminishing weight**, which is what this ADR specifies.
 
@@ -50,12 +52,13 @@ Verified end to end:
 ```
 
 ## Consequences
-
-- **The profile can finally be populated**, from repository work alone. [ADR 0010](0010-proficiency-decays-with-inactivity.md)'s decay still applies to what accumulates. Repository work is now the only source ([ADR 0003](0003-repository-work-is-the-only-evidence.md)).
-- **Scoring depends on authorship verification.** `verify_edit.py` maps its verdict to `--assistance`, so the coefficient is observed rather than declared. `UNVERIFIED` maps to `full` — if nobody can prove who typed it, it does not count as theirs.
+### Positive
+- **The profile can finally be populated**, from repository work alone. [ADR 0010](ADR-0010-proficiency-decays-with-inactivity.md)'s decay still applies to what accumulates. Repository work is now the only source ([ADR 0003](ADR-0003-repository-work-is-the-only-evidence.md)).
 - **The score can go down**, from failures and from ageing. That is the point; a figure that only rises is a vanity metric.
-- **The numbers are judgement, not measurement.** 0.5, 0.3, 0.8, 1.5, two tasks — every one is a choice. They are internally consistent and defensible, and none of them is validated against whether a `shipped` concept predicts real capability. That study is still ADR 0012's, still unrun.
 - **Proficiency is per person, not per project**, and stays in `~/.grit/evidence.jsonl`. Learning token buckets in one repository does not un-learn them in the next. Only the raw observations — the authorship log and the snapshots — are per project, because that is where the work happens. Each evidence row records which project it came from, so provenance is inspectable even though the score is not partitioned.
+### Negative
+- **Scoring depends on authorship verification.** `verify_edit.py` maps its verdict to `--assistance`, so the coefficient is observed rather than declared. `UNVERIFIED` maps to `full` — if nobody can prove who typed it, it does not count as theirs.
+- **The numbers are judgement, not measurement.** 0.5, 0.3, 0.8, 1.5, two tasks — every one is a choice. They are internally consistent and defensible, and none of them is validated against whether a `shipped` concept predicts real capability. That study is still ADR 0012's, still unrun.
 - **Concept names are the schema, and they are chosen in conversation.** That makes naming a correctness concern, not a style one, and it fails silently in two directions. *Fragmentation* — `token-bucket` vs `token_bucket` — splits one concept's evidence so it can never reach `shipped`, and looks like the product is broken. *Collision* — `middleware` meaning two different things in two repositories — merges unrelated evidence and inflates a level. Mitigated three ways: `score.py concepts` lists what exists, `score.py record` warns on a near-duplicate name before writing, and `SKILL.md` requires the assistant to read the list before proposing and to name the *transferable* idea, qualifying it only where the knowledge does not transfer. None of that is enforcement — the user owns their names — but the silent case is now a loud one.
 - **`assistance: partial` is self-reported by the assistant.** The hook proves the human typed the bytes; it cannot see how much they were walked through. This is the one soft coefficient in the model and it should be named as such rather than hidden.
 
@@ -68,9 +71,16 @@ Verified end to end:
 - **A single global number** — rejected. Most legible, most gameable, furthest from evidence.
 - **Geometric decay without a cap** — rejected; `0.5^n` converges to 2× base, which still lets one repeated repository task reach `shipped`.
 
-## Backlinks
+## Implements Rules
+- None — no rules are defined for this project yet.
+
+## Verification
+- `python3 skills/grit/score.py selftest` — `_check_worked_examples_match_the_model`, `_check_assistance`, `_check_proven_needs_two_unaided`, `_check_repetition_is_capped`, `_check_failures_and_age`, `_check_near_duplicate_detection`, `_check_failed_flag_reaches_the_file`.
+- `python3 bin/check_docs.py` — scoring constants and computed values quoted in prose must match the code.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0010 — Proficiency decays with inactivity](0010-proficiency-decays-with-inactivity.md)
-- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
-- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)
+- [ADR 0010 — Proficiency decays with inactivity](ADR-0010-proficiency-decays-with-inactivity.md)
+- [ADR 0011 — Routing, deferred](ADR-0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0003 — Repository work is the only evidence](ADR-0003-repository-work-is-the-only-evidence.md)

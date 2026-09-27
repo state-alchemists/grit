@@ -1,6 +1,8 @@
 # Drift Report: {{FEATURE_NAME}} ({{KEY}})
 
-**Documented at**: {{YYYY-MM-DDTHH-MM-SS}}
+*Dates: see `.sdlc/CONVENTIONS.md` § Dates and timestamps — run `date`, do not guess.*
+
+**Documented at**: {{TIMESTAMP}}
 **Scope**: {{scope}}
 **Baseline**: {{existing spec.md / old-format requirements.md + design.md / none}}
 **Source commit**: {{short sha}}

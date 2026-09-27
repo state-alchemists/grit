@@ -1,26 +1,62 @@
-# Architecture
+# Architecture: Grit
 
 How grit actually works, end to end — **the mechanism**.
 
 For the principles that constrain it and the limits it has not escaped, see [DESIGN.md](DESIGN.md). For individual decisions and what was rejected, see [`adr/`](adr/README.md).
 
----
+**The one-sentence version:** a hook watches who writes code, git says what changed, and a local daemon turns those two facts plus your own justification into a per-concept level you did not award yourself.
 
-## The one-sentence version
+## System Context
 
-A hook watches who writes code, git says what changed, and a local daemon turns those two facts plus your own justification into a per-concept level you did not award yourself.
+```mermaid
+flowchart LR
+    dev["Developer<br/>does the task, or hands it off"]
+    tool["AI coding tool<br/>Claude Code, zrb, and 29 more for the skill"]
+    grit["Grit<br/>skill, hook, daemon"]
+    repo["Project repository<br/>git working tree"]
+    home["~/.grit/<br/>JSON and JSONL"]
+    browser["Browser<br/>dashboard on 127.0.0.1"]
+    dev -->|"asks for work, answers the offer"| tool
+    tool -->|"loads the skill, fires the hook on every tool call"| grit
+    grit -->|"git status, git diff"| repo
+    grit -->|"appends and reads"| home
+    dev -->|"opens"| browser
+    browser -->|"polls"| grit
+```
 
-## Three processes, and they barely know each other
+- **Developer** — chooses per task whether to do it themselves, and justifies the result. Nothing they say about their own skill is scored.
+- **AI coding tool** — loads `skills/grit/SKILL.md` and runs the hook. The hook needs a `PreToolUse` mechanism, which only Claude Code and zrb have; everywhere else nobody is watching, so a task verifies as `UNVERIFIED`.
+- **Project repository** — the work itself. Grit writes nothing into it: everything lives under `~/.grit/`.
+- **Browser** — renders the dashboard from the local daemon. Nothing leaves the machine ([DESIGN.md §3](DESIGN.md#3-the-privacy-boundary)).
 
-| Process | Lives for | Writes | Never does |
-|---|---|---|---|
-| **the hook** (`hooks/grit-hook.py`) | milliseconds, once per tool call | `~/.grit/projects/<key>/authorship.jsonl` | talk to the daemon, block an edit |
-| **the assistant** (`skills/grit/SKILL.md`) | your session | evidence, via `score.py` | decide the check passed |
-| **the daemon** (`skills/grit/serve.py`) | until stopped | `~/.grit/preferences.json`, `daemon.json` | record evidence, or run your acceptance check |
+## Structure — Containers
+
+Three separately running processes that barely know each other, and the files they meet through.
+
+```mermaid
+flowchart LR
+    subgraph runtime["Inside the AI coding tool"]
+        hook["grit-hook.py<br/>Python, once per tool call"]
+        skill["SKILL.md + verify_edit.py, score.py<br/>Python, per command the assistant runs"]
+    end
+    files[("~/.grit/<br/>JSON and JSONL files")]
+    daemon["serve.py<br/>Python http.server on 127.0.0.1"]
+    page["dashboard.html<br/>browser, no build step"]
+    hook -->|"appends authorship.jsonl"| files
+    skill -->|"appends evidence.jsonl, tasks.jsonl"| files
+    daemon -->|"reads; writes only preferences.json"| files
+    page -->|"HTTP GET, every 30s and on focus"| daemon
+```
+
+| Part | Technology | Lives for | Writes | Never does |
+|------|-----------|-----------|--------|------------|
+| **the hook** (`hooks/grit-hook.py`) | Python stdlib, `PreToolUse` / `PostToolUse` command hook | milliseconds, once per tool call | `~/.grit/projects/<key>/authorship.jsonl` | talk to the daemon, block an edit |
+| **the assistant** (`skills/grit/SKILL.md`) | Markdown skill driving `verify_edit.py` and `score.py` | your session | evidence, via `score.py` | decide the check passed |
+| **the daemon** (`skills/grit/serve.py`) | Python stdlib `http.server`, localhost only | until stopped | `~/.grit/preferences.json`, `daemon.json` | record evidence, or run your acceptance check |
 
 They are deliberately not coupled. The hook cannot depend on the daemon running, or every file edit would inherit the daemon's uptime. The daemon cannot depend on the hook, or a fresh machine could not render a dashboard. They meet through files.
 
-## The files, and which one is the truth
+### Data stores — which file is the truth
 
 Everything is JSON or JSONL on disk. There is no database and no server you do not control.
 
@@ -51,45 +87,19 @@ Only `evidence.jsonl` is the record: delete anything else and your score does no
 
 The split is deliberate: **observations are keyed by project, proficiency is per person** — and both now live under `~/.grit/`, not inside the repository. Learning token buckets in one repository does not un-learn them in the next.
 
-## The path a score takes
+## Components
 
-```mermaid
-flowchart TD
-    subgraph OBSERVE ["① Observation — automatic"]
-        W["assistant calls Write / Edit"] -->|PreToolUse| H["grit-hook.py"]
-        B["assistant calls Bash"] -->|PreToolUse| H
-        H --> H1["append authorship.jsonl<br/>edits: exact lines · shell: files it wrote"]
-        H --> H2["register project in ~/.grit/projects.json"]
-    end
+### Scripts
 
-    subgraph WORK ["② A task you do yourself"]
-        C["agree concepts, you confirm"] --> SNAP["verify_edit.py snapshot<br/>records the git baseline"]
-        SNAP --> DIY["you write the code<br/>assistant answers, writes nothing"]
-        DIY --> CHK["your acceptance check runs<br/>must actually pass"]
-        CHK --> JUS["you justify the result"]
-        JUS --> VER["verify_edit.py verify<br/>git diff + authorship log"]
-    end
-
-    subgraph SCORE ["③ Evidence → level"]
-        VER -->|HUMAN-WRITTEN / ASSISTED / UNVERIFIED| EV["~/.grit/evidence.jsonl"]
-        EV --> CALC["score.py<br/>source × assistance × novelty"]
-        CALC --> LV["learning → practised → shipped"]
-    end
-
-    subgraph VIEW ["④ Dashboard — polls, never pushed"]
-        D["serve.py --daemon"] --> API["/score /authorship /tasks /status"]
-        API --> PAGE["browser, refreshes on focus + every 30s"]
-    end
-
-    H1 --> VER
-    LV --> API
-    H1 --> API
-
-    style EV fill:#2d5a3d,color:#fff
-    style LV fill:#2d5a3d,color:#fff
-```
-
-## The pieces
+| Component | Responsibility | Dependencies |
+|-----------|---------------|-------------|
+| `hooks/grit-hook.py` | Records authorship per tool call; offers once per session; the killswitch CLI (`--off` / `--on`) | none — installs apart from the skill |
+| `skills/grit/verify_edit.py` | Snapshots the git baseline at handover; returns the verdict; appends `tasks.jsonl` | git, `authorship.jsonl`, `doctor.is_watching()` |
+| `skills/grit/score.py` | Evidence → level; `record`, `show`, `concepts`, `level`, `selftest` | `evidence.jsonl` |
+| `skills/grit/serve.py` | Serves the dashboard and read-only views; writes `preferences.json` | every file above, read-only |
+| `skills/grit/dashboard.html` | Renders the views; polls | the daemon's routes |
+| `skills/grit/doctor.py` | Finds and runs every hook registration on the machine | Claude Code and zrb config files |
+| `bin/install.sh`, `bin/_wire_hook.py` | Installs the skill, wires the hook, verifies the install | bash 3.2, `doctor.py` |
 
 ### `hooks/grit-hook.py` — the only un-arguable measurement
 
@@ -97,7 +107,7 @@ Runs as a `PreToolUse` and `PostToolUse` command hook. Before a tool call it app
 
 Three properties it must never lose, each of which was once broken:
 
-- **It cannot block an edit.** Python exits `2` when it cannot open a script, and `2` is exactly the code both runtimes read as *block this tool call*. Every registration is therefore `python3 '<path>' || exit 0` — see [ADR 0007](adr/0007-hooks-must-fail-open.md).
+- **It cannot block an edit.** Python exits `2` when it cannot open a script, and `2` is exactly the code both runtimes read as *block this tool call*. Every registration is therefore `python3 '<path>' || exit 0` — see [ADR 0007](adr/ADR-0007-hooks-must-fail-open.md).
 - **Shell calls are observed, and opaque until they are.** An assistant editing through `python3 - <<EOF` produces no edit event. Before each shell call the hook fingerprints `git status` (every listed path's size and mtime) under `pending-shell/<tool_use_id>`; after it, a `shell-result` row names the files that changed. `verify_edit.py` treats a call that wrote nothing as harmless, one that wrote files as the assistant's, and one with no result as unobserved (`UNVERIFIED`). A commit is not a write — content is untouched. Its own in-flight call is excused only when the command is a plain `verify_edit.py verify` invocation. Without this, the assistant running the user's tests, or running `verify_edit.py`, voided every task the skill handed over. Limits: only paths `git status` lists are seen, so a write to an ignored file is invisible; an unignored build artifact counts as the assistant's.
 - **One event, one row.** Two registrations can match one edit (user-level plus project-level, or zrb reading Claude's settings). A content hash inside `DEDUPE_WINDOW` de-duplicates; the window is narrow on purpose, because a wider one swallowed real retries.
 
@@ -118,11 +128,11 @@ The subtle one: **an absent authorship log is ambiguous.** No hook installed mea
 
 ### `skills/grit/score.py` — evidence → level
 
-`credit = source_weight × assistance × novelty`, capped per task, summed, max 1.0. The constants and the reasoning behind each are [ADR 0009](adr/0009-graded-score-from-capped-evidence.md)'s; the user-facing table is in the [README](../../README.md#the-score).
+`credit = source_weight × assistance × novelty`, capped per task, summed, max 1.0. The constants and the reasoning behind each are [ADR 0009](adr/ADR-0009-graded-score-from-capped-evidence.md)'s; the user-facing table is in the [README](../../README.md#the-score).
 
-`suggest_mode` is the router: `score.py level <concept>...` pre-selects *guided* only for a concept still at `learning` with a recorded failure, and *solo* otherwise, because guidance goes only where a gap was measured ([ADR 0002](adr/0002-withhold-guidance-by-default.md)).
+`suggest_mode` is the router: `score.py level <concept>...` pre-selects *guided* only for a concept still at `learning` with a recorded failure, and *solo* otherwise, because guidance goes only where a gap was measured ([ADR 0002](adr/ADR-0002-withhold-guidance-by-default.md)).
 
-A task's identity is `(source, project, task)` — task ids are per-project sequences, so `001` in two repos is two tasks. Evidence rows from the removed tutorials say `"source": "sandbox"`; they stay in the append-only file, and `score_concept` skips any source it does not credit. Full reasoning and the calibration errors that were caught by running it: [ADR 0009](adr/0009-graded-score-from-capped-evidence.md).
+A task's identity is `(source, project, task)` — task ids are per-project sequences, so `001` in two repos is two tasks. Evidence rows from the removed tutorials say `"source": "sandbox"`; they stay in the append-only file, and `score_concept` skips any source it does not credit. Full reasoning and the calibration errors that were caught by running it: [ADR 0009](adr/ADR-0009-graded-score-from-capped-evidence.md).
 
 ### `skills/grit/serve.py` — the daemon
 
@@ -154,6 +164,78 @@ It **polls**: the writer is a hook process that exits immediately and has nowher
 - **`bin/install.sh`** — installs to 31 runtimes; wires hooks only where a `PreToolUse` mechanism exists (Claude Code, zrb). Merges config, never overwrites, backs up first, and **verifies its own work**: the daemon, scoring and hook self-checks must all pass or it exits non-zero. `check_docs.py` runs too, but only warns — drifted prose should not block an install.
 - **`bin/_wire_hook.py`** — the two config shapes, kept out of the shell.
 
+## Key Decisions
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-0001](adr/ADR-0001-measure-the-effect.md) | Measure the effect; make the invisible visible | Accepted |
+| [ADR-0002](adr/ADR-0002-withhold-guidance-by-default.md) | Withhold guidance by default; grant it narrowly and adaptively | Accepted |
+| [ADR-0003](adr/ADR-0003-repository-work-is-the-only-evidence.md) | Repository work is the only evidence; tutorials are removed | Accepted |
+| [ADR-0007](adr/ADR-0007-hooks-must-fail-open.md) | A hook must fail open, and the guard belongs in the registration | Accepted |
+| [ADR-0008](adr/ADR-0008-dashboard-polls-files-it-does-not-push.md) | The dashboard polls files; nothing pushes | Accepted |
+| [ADR-0009](adr/ADR-0009-graded-score-from-capped-evidence.md) | A graded score, derived from capped evidence | Accepted |
+| [ADR-0010](adr/ADR-0010-proficiency-decays-with-inactivity.md) | Proficiency decays with inactivity | Accepted |
+| [ADR-0011](adr/ADR-0011-routing-on-a-measured-profile-deferred.md) | Routing on a measured profile, and why it is deferred | Accepted — partly built |
+| [ADR-0012](adr/ADR-0012-profile-validity-is-the-critical-path.md) | Profile validity is the critical path | Accepted — unrun |
+
+## Key Flows
+
+### A task you do yourself — the path a score takes
+
+The flow the product exists for. The two things readers get wrong are marked: the assistant never decides the check passed, and the verdict comes from the authorship log, not from what anyone says.
+
+```mermaid
+sequenceDiagram
+    actor Dev as Developer
+    participant A as Assistant (skill)
+    participant H as grit-hook.py
+    participant V as verify_edit.py
+    participant S as score.py
+    participant F as ~/.grit files
+    A->>Dev: agree the concepts
+    Dev-->>A: confirm
+    A->>V: snapshot
+    V->>F: git baseline for this task
+    Note over Dev,A: the developer writes the code, the assistant answers and writes nothing
+    A->>H: any tool call fires PreToolUse
+    H->>F: append authorship.jsonl row
+    Dev->>A: acceptance check passes, then the justification
+    A->>V: verify
+    V->>F: read authorship.jsonl, git diff against the baseline
+    V->>F: append tasks.jsonl
+    V-->>A: HUMAN-WRITTEN, ASSISTED or UNVERIFIED
+    A->>S: record, assistance taken from the verdict
+    S->>F: append evidence.jsonl
+    Note over S,F: the level is derived on every read, stored nowhere
+```
+
+### The dashboard refresh
+
+Where readers expect a push and there is none: the hook exits before any connection could be held, so files are the handoff ([ADR 0008](adr/ADR-0008-dashboard-polls-files-it-does-not-push.md)).
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (dashboard.html)
+    participant D as serve.py
+    participant F as ~/.grit files
+    loop every 30s, and when the tab regains focus
+        B->>D: GET status, score, authorship, tasks
+        D->>F: read evidence, authorship, tasks
+        D-->>B: JSON, derived per request
+    end
+    Note over B,D: a failing route blanks only its own panel and names itself in the header
+```
+
+## Deployment
+
+No servers. Nothing runs outside the developer's machine.
+
+| Environment | Infrastructure | Strategy |
+|-------------|---------------|----------|
+| Developer machine | `bin/install.sh` copies the skill into each tool's skills directory and wires the hook for Claude Code and zrb; `serve.py --daemon` binds `127.0.0.1` | Upgrade = `git pull && bin/install.sh`; the installer runs the self-checks and exits non-zero if any fails |
+
+There is no CI. The self-checks run by hand ([AGENTS.md §2](../../AGENTS.md#2-run-it-do-not-reason-about-it)) and inside the installer.
+
 ## Invariants
 
 Break any of these and the record stops meaning anything. Each has a test, and each was once broken.
@@ -164,4 +246,4 @@ Break any of these and the record stops meaning anything. Each has a test, and e
 4. **A shell call voids a task only if it was not observed.** One observed writing nothing is harmless; one observed writing files is the assistant's.
 5. **Every endpoint the dashboard fetches must answer.** The test derives the list from `dashboard.html` itself, so it cannot drift.
 
-The self-checks that pin these, and how to run them, are in [AGENTS.md §2](../../AGENTS.md#2-run-it-do-not-reason-about-it). What is deliberately not built is [DESIGN.md §2](DESIGN.md#2-scope).
+What is deliberately not built is [DESIGN.md §2](DESIGN.md#2-scope).

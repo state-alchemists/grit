@@ -52,9 +52,15 @@ def live_docs() -> Iterator[tuple[pathlib.Path, str]]:
         if any(v in rel for v in VENDORED):
             continue
         text = p.read_text(encoding="utf-8")
-        if re.search(r"\*\*Status\*\*:\s*\*?\*?Superseded", text):
+        if _get_adr_status(text).startswith("Superseded"):
             continue  # history, exempt by design
         yield p, text
+
+
+def _get_adr_status(text: str) -> str:
+    """The first line under an ADR's `## Status` heading, or "" for any other doc."""
+    m = re.search(r"^## Status[ \t]*\n+\**([^\n]+)", text, re.M)
+    return m.group(1).strip() if m else ""
 
 
 # ── The checks. One function per class, each pure with respect to the others:
@@ -348,7 +354,7 @@ def check_adr_citations() -> None:
     sweep never looked at. Code cites ADRs too, and a citation to a number
     nobody has is worse than none — it sends a reader hunting for a file.
     """
-    live_adrs = {f.name[:4] for f in (ROOT / ".sdlc" / "docs" / "adr").glob("0*.md")}
+    live_adrs = {f.name[4:8] for f in (ROOT / ".sdlc" / "docs" / "adr").glob("ADR-*.md")}
     sources = [p_ for p_ in ROOT.rglob("*.py") if ".git" not in p_.parts]
     sources += [ROOT / "bin" / "install.sh"]
     sources += [p_ for p_, _ in live_docs()]
@@ -403,16 +409,17 @@ def check_adr_index() -> None:
         if not f.exists():
             add("MISSING ADR", index.name, fname)
             continue
-        m = re.search(r"- \*\*Status\*\*: (.+)", f.read_text())
-        if (
-            m
-            and norm(status)[:8] not in norm(m.group(1))
-            and norm(m.group(1))[:8] not in norm(status)
+        file_status = _get_adr_status(f.read_text())
+        if not file_status:
+            add("ADR WITHOUT STATUS", fname, "no `## Status` section")
+        elif (
+            norm(status)[:8] not in norm(file_status)
+            and norm(file_status)[:8] not in norm(status)
         ):
             add(
                 "ADR STATUS MISMATCH",
                 fname,
-                "index says %r, file says %r" % (status.strip(), m.group(1).strip()),
+                "index says %r, file says %r" % (status.strip(), file_status),
             )
 
 

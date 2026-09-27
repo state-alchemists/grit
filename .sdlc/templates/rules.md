@@ -1,5 +1,7 @@
 # Project Rules — Constitution
 
+*Dates: see `.sdlc/CONVENTIONS.md` § Dates and timestamps — run `date`, do not guess.*
+
 > Immutable invariants. Every SDLC skill reads this file and refuses to violate it.
 > Override process: see RULE-999 below. Do not edit rule statements without an Override Record.
 
@@ -17,7 +19,7 @@
 | Statement | {{The rule, phrased as ALWAYS/NEVER}} |
 | Rationale | {{Why this exists — past incident, regulation, team standard}} |
 | Enforcement | {{How violations are detected — lint rule, review checklist, CI gate}} |
-| Added | {{YYYY-MM-DD}} |
+| Added | {{TODAY}} |
 
 ## Override Process — RULE-999
 | Field | Value |

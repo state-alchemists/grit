@@ -1,5 +1,8 @@
 # Review Report: {{FEATURE_NAME}} ({{KEY}})
 
+## Review Context
+{{Fresh session / in-session — which phase wrote the implementation (implement, quickfix, adopt Mode C), or "not applicable". Verdict is capped at COMMENT whenever the review ran in the session that wrote the code.}}
+
 ## Scoped Files
 {{List of reviewed files}}
 

@@ -1,6 +1,8 @@
-# ADR 0012 — Profile validity is the critical path
+# ADR-0012: Profile validity is the critical path
 
-- **Status**: Accepted — the study is **unrun**
+## Status
+Accepted — the study is **unrun**
+
 - **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: validation, study, risk, falsification
@@ -9,17 +11,17 @@
 
 Every decision in this repository depends on one unverified assumption: **that the level a concept carries predicts real-work proficiency.**
 
-- [ADR 0001](0001-measure-the-effect.md) exists to make that level visible.
-- [ADR 0002](0002-withhold-guidance-by-default.md) withholds guidance based on it — the expertise-reversal argument depends on knowing who is an expert.
-- [ADR 0009](0009-graded-score-from-capped-evidence.md) computes it and concedes every constant in it is a judgement.
-- [ADR 0010](0010-proficiency-decays-with-inactivity.md) ages it.
-- [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) would route on it, if it were built.
+- [ADR 0001](ADR-0001-measure-the-effect.md) exists to make that level visible.
+- [ADR 0002](ADR-0002-withhold-guidance-by-default.md) withholds guidance based on it — the expertise-reversal argument depends on knowing who is an expert.
+- [ADR 0009](ADR-0009-graded-score-from-capped-evidence.md) computes it and concedes every constant in it is a judgement.
+- [ADR 0010](ADR-0010-proficiency-decays-with-inactivity.md) ages it.
+- [ADR 0011](ADR-0011-routing-on-a-measured-profile-deferred.md) would route on it, if it were built.
 
-If a `shipped` concept does not predict real capability, then the levels are noise, the dashboard is a confident view of a guess, and the product's central claim — *"a score you did not award yourself"* — is true about the mechanism and empty about the meaning. The design does not degrade gracefully in that case. It collapses to a measurement of who typed what, which is [ADR 0001](0001-measure-the-effect.md) and nothing more.
+If a `shipped` concept does not predict real capability, then the levels are noise, the dashboard is a confident view of a guess, and the product's central claim — *"a score you did not award yourself"* — is true about the mechanism and empty about the meaning. The design does not degrade gracefully in that case. It collapses to a measurement of who typed what, which is [ADR 0001](ADR-0001-measure-the-effect.md) and nothing more.
 
 This is not a hypothetical risk to note and proceed past. It is the load-bearing claim.
 
-**What changed with the instrument.** This record began as *"Battery validity is the critical path"*, when the onboarding battery was the only instrument. [ADR 0009](0009-graded-score-from-capped-evidence.md) replaced the battery with a score derived from observed work, and [ADR 0011](0011-routing-on-a-measured-profile-deferred.md) deferred the battery indefinitely. **The instrument changed; the question did not.** The battery was to be validated *before* it was built, because it was pure cost until it predicted something. The score is different: it is derived from work the user was doing anyway, so it is cheap to collect and already accumulating. That makes the study easier to run and removes the argument for blocking implementation on it — but it removes none of the risk, because an unvalidated number shown to a user is a claim whether or not it was cheap.
+**What changed with the instrument.** This record began as *"Battery validity is the critical path"*, when the onboarding battery was the only instrument. [ADR 0009](ADR-0009-graded-score-from-capped-evidence.md) replaced the battery with a score derived from observed work, and [ADR 0011](ADR-0011-routing-on-a-measured-profile-deferred.md) deferred the battery indefinitely. **The instrument changed; the question did not.** The battery was to be validated *before* it was built, because it was pure cost until it predicted something. The score is different: it is derived from work the user was doing anyway, so it is cheap to collect and already accumulating. That makes the study easier to run and removes the argument for blocking implementation on it — but it removes none of the risk, because an unvalidated number shown to a user is a claim whether or not it was cheap.
 
 ## Decision
 
@@ -28,7 +30,7 @@ This is not a hypothetical risk to note and proceed past. It is the load-bearing
 ## Rationale
 
 - **It is cheap to test.** No new product is needed. `evidence.jsonl` already records concept, source, assistance and date; what is missing is a later unassisted outcome to correlate against.
-- **A negative result is a real result.** If the level does not predict, the honest product is authorship measurement ([ADR 0001](0001-measure-the-effect.md)) with no levels at all — worth knowing before a router is built on top.
+- **A negative result is a real result.** If the level does not predict, the honest product is authorship measurement ([ADR 0001](ADR-0001-measure-the-effect.md)) with no levels at all — worth knowing before a router is built on top.
 - **The failure is invisible without the study.** A level that carries no information looks exactly like one that does. Nothing in the running system can tell the difference, which is why it needs an outside measurement rather than more tests.
 
 ## The study
@@ -67,15 +69,24 @@ Adapted from the single-case-study methods review:
 **Retained skill.** No design here can measure it; that requires a delayed unassisted assessment. Adoption and behaviour are not learning, and this study must not be reported as if they were. This is the same category error that produced the Kapoor mis-citation earlier in the design.
 
 ## Consequences
+### Positive
+- The highest-risk assumption is named, and the data needed to test it is already being collected rather than waiting on a build.
+### Negative
+- The product ships levels it cannot yet justify. This is mitigated by saying so — in the README, in `DESIGN.md`, and in what the assistant is permitted to claim — and not otherwise.
+- An N=1 study cannot distinguish "the score is invalid" from "the score is invalid for me." The version worth running later — 10–20 developers, measuring unassisted outcomes against recorded levels — is a weekend of work and has not been run by anyone in this space. This is deliberately weaker evidence than the multi-subject studies the README cites to motivate the product at all (Bastani et al., N≈1000; METR, N=16 developers × 246 tasks) — a result from this study is a first signal about this design, not a replication at their strength, and must not be reported or cited as if it were.
+### Follow-ups
+- If Q1 fails, [ADR 0002](ADR-0002-withhold-guidance-by-default.md), [0009](ADR-0009-graded-score-from-capped-evidence.md), [0010](ADR-0010-proficiency-decays-with-inactivity.md) and [0011](ADR-0011-routing-on-a-measured-profile-deferred.md) all require revision, and the product reduces to [ADR 0001](ADR-0001-measure-the-effect.md).
 
-- **Positive**: the highest-risk assumption is named, and the data needed to test it is already being collected rather than waiting on a build.
-- **Negative**: the product ships levels it cannot yet justify. This is mitigated by saying so — in the README, in `DESIGN.md`, and in what the assistant is permitted to claim — and not otherwise.
-- **Negative**: an N=1 study cannot distinguish "the score is invalid" from "the score is invalid for me." The version worth running later — 10–20 developers, measuring unassisted outcomes against recorded levels — is a weekend of work and has not been run by anyone in this space. This is deliberately weaker evidence than the multi-subject studies the README cites to motivate the product at all (Bastani et al., N≈1000; METR, N=16 developers × 246 tasks) — a result from this study is a first signal about this design, not a replication at their strength, and must not be reported or cited as if it were.
-- **Follow-ups**: if Q1 fails, [ADR 0002](0002-withhold-guidance-by-default.md), [0009](0009-graded-score-from-capped-evidence.md), [0010](0010-proficiency-decays-with-inactivity.md) and [0011](0011-routing-on-a-measured-profile-deferred.md) all require revision, and the product reduces to [ADR 0001](0001-measure-the-effect.md).
+## Implements Rules
+- None — no rules are defined for this project yet.
 
-## Backlinks
+## Verification
+- `bin/test_study_report.py` pins the analysis the study would run (5 properties).
+- None for the decision itself: the study is unrun, and running it is the only verification there is.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0001 — Measure the effect](0001-measure-the-effect.md)
-- [ADR 0009 — A graded score](0009-graded-score-from-capped-evidence.md)
-- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0001 — Measure the effect](ADR-0001-measure-the-effect.md)
+- [ADR 0009 — A graded score](ADR-0009-graded-score-from-capped-evidence.md)
+- [ADR 0011 — Routing, deferred](ADR-0011-routing-on-a-measured-profile-deferred.md)

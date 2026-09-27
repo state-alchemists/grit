@@ -1,8 +1,13 @@
 # Quickfix: {{ONE-LINE DESCRIPTION}}
 
-**Date**: {{YYYY-MM-DD}}
+*Dates: see `.sdlc/CONVENTIONS.md` § Dates and timestamps — run `date`, do not guess.*
+
+**Date**: {{TODAY}}
 **Feature**: {{slug}}  **Key**: {{KEY}}
 **Trigger**: {{Bug ticket / user request / observation}}
+**Promoted**: {{yes — folded into spec.md / no — kept standalone}}
+
+*Once `Promoted: yes`, this file is a historical record: its IDs live in `spec.md`, so the next-ID scan no longer needs it and it can move to `archive/`. A `Promoted: no` delta must stay beside `spec.md` — it is the only place its IDs are written down.*
 
 ## Behaviour Change Summary
 {{One short paragraph: what the system did before, what it will do after, why.}}

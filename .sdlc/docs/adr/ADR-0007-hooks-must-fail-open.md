@@ -1,6 +1,8 @@
-# ADR 0007 — A hook must fail open, and the guard belongs in the registration
+# ADR-0007: A hook must fail open, and the guard belongs in the registration
 
-- **Status**: Accepted
+## Status
+Accepted
+
 - **Date**: 2026-09-13
 - **Deciders**: Go Frendi
 - **Context tags**: hooks, integrity, availability, installer
@@ -45,11 +47,12 @@ Three properties follow:
 And because a broken registration is invisible until someone reads JSON by hand, **`skills/grit/doctor.py`** enumerates every site a registration can hide (claude user/project, zrb user/project), resolves the script path, and *actually executes each command* to check whether it returns 2. It ships inside the skill, so `/grit` can run it without the repository present.
 
 ## Consequences
-
+### Positive
 - **A hook can no longer stop anyone working.** Pinned by `hooks/test_hook.py` property 13, which asserts the unguarded form really does exit 2 (the precondition) and that the guard turns it into 0.
-- **A silently dead hook is now the failure mode** — it records nothing and says nothing. That is the correct trade against blocking, and `doctor.py` exists to make it visible on demand.
 - **The guard is in the registration, not the script**, so it protects failures the script can never catch. Anything generating a registration by another route must reproduce it; the doctor flags an unguarded entry as `risky` even when it currently works.
-- **The lesson generalises, and it is the same one as the two-credential split** (folded into [ADR 0003](0003-repository-work-is-the-only-evidence.md)). A guarantee was written in a docstring, tested only where it was already true, and shipped false. Every defect this project has had lives at the seam where code meets a real runtime: a variable expanded away by a skill loader, a relative path that only resolves in one runtime, a CSS origin conflict, an exit-code collision. Unit tests saw none of them.
+### Negative
+- **A silently dead hook is now the failure mode** — it records nothing and says nothing. That is the correct trade against blocking, and `doctor.py` exists to make it visible on demand.
+- **The lesson generalises, and it is the same one as the two-credential split** (folded into [ADR 0003](ADR-0003-repository-work-is-the-only-evidence.md)). A guarantee was written in a docstring, tested only where it was already true, and shipped false. Every defect this project has had lives at the seam where code meets a real runtime: a variable expanded away by a skill loader, a relative path that only resolves in one runtime, a CSS origin conflict, an exit-code collision. Unit tests saw none of them.
 
 ## Alternatives Considered
 
@@ -58,7 +61,15 @@ And because a broken registration is invisible until someone reads JSON by hand,
 - **Register an absolute path and validate at install time** — necessary but insufficient: the installer already verified, and the path still went stale afterwards when files moved.
 - **Use exec form to avoid shell quoting entirely** — rejected; it cannot carry the guard, and path-with-spaces is a smaller risk than fail-closed.
 
-## Backlinks
+## Implements Rules
+- None — no rules are defined for this project yet.
+
+## Verification
+- `hooks/test_hook.py` — `_property_missing_script_cannot_block`: the unguarded form really exits 2, and the guard turns it into 0.
+- `hooks/test_hook.py` — `_property_installer_registers_and_removes_both_events`.
+- `python3 skills/grit/doctor.py` runs every registration on this machine and flags an unguarded one as `risky`.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)
+- [ADR 0003 — Repository work is the only evidence](ADR-0003-repository-work-is-the-only-evidence.md)

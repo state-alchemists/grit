@@ -1,7 +1,7 @@
 # ADR-{{NUMBER}}: {{TITLE}}
 
 ## Status
-{{Proposed / Accepted / Deprecated / Superseded by ADR-{{M}}}}
+{{Proposed / Accepted / Deprecated / Superseded by ADR-NNN}}
 
 ## Context
 {{Why this decision is needed}}

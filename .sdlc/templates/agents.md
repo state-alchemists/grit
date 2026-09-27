@@ -22,7 +22,10 @@ python3 .sdlc/tools/sdlc-validate.py
 
 | Directory | Purpose |
 |-----------|---------|
-| `src/` | Source code |
+| {{source root(s)}} | Source code |
+| {{test root(s)}} | Tests |
+| `.sdlc/config.json` | Source/test layout, comment styles, scan overrides |
+| `.sdlc/ANNOTATION.md` | Comment syntax and header placement per language |
 | `.sdlc/docs/product.md` | Product vision |
 | `.sdlc/docs/tech.md` | Tech decisions |
 | `.sdlc/docs/test-strategy.md` | Testing approach |

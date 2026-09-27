@@ -6,7 +6,7 @@ When the AI is about to do something, it asks whether you'd rather do it yoursel
 
 The name is the thesis: grit is the opposite of friction-avoidance.
 
-> **Status:** the scoring loop works end to end. Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is missing — the real risk — is any evidence that a `shipped` level predicts real capability. Read [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md) before building anything.
+> **Status:** the scoring loop works end to end. Do a task yourself, pass its check, and the concept gains a level you did not award yourself. What is missing — the real risk — is any evidence that a `shipped` level predicts real capability. Read [ADR 0012](.sdlc/docs/adr/ADR-0012-profile-validity-is-the-critical-path.md) before building anything.
 
 ---
 
@@ -89,7 +89,7 @@ Ask for something with no oracle — *teach me project management* — and it wi
 + a 2nd distinct unaided task    1.00  shipped
 ```
 
-Failures subtract 0.25. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0009](.sdlc/docs/adr/0009-graded-score-from-capped-evidence.md).
+Failures subtract 0.25. Evidence older than 90 days counts half. A number that can only rise is not a measurement — see [ADR 0009](.sdlc/docs/adr/ADR-0009-graded-score-from-capped-evidence.md).
 
 ## The dashboard
 
@@ -134,7 +134,7 @@ The skill goes to `<dotdir>/skills/grit/` for every target — zrb, Claude Code,
 | zrb | `~/.zrb/hooks.json` | zrb's native hook array, both events |
 | everything else | — | skill works; no prompt, and authorship is `UNVERIFIED` |
 
-Configs are merged, never overwritten, and backed up first; every registration is guarded with `|| exit 0` so a broken hook can never block a tool call ([ADR 0007](.sdlc/docs/adr/0007-hooks-must-fail-open.md)). zrb also reads `~/.claude/settings.json`, so on a machine with both, one edit reaches the hook twice; the hook de-duplicates identical events, so authorship is still counted once.
+Configs are merged, never overwritten, and backed up first; every registration is guarded with `|| exit 0` so a broken hook can never block a tool call ([ADR 0007](.sdlc/docs/adr/ADR-0007-hooks-must-fail-open.md)). zrb also reads `~/.claude/settings.json`, so on a machine with both, one edit reaches the hook twice; the hook de-duplicates identical events, so authorship is still counted once.
 
 **Without the hook**, the profile and dashboard still work. Two things are lost. Authorship is no longer observed, so `verify_edit.py` reports `UNVERIFIED` rather than guessing. And the moment is gone: grit only activates when the model judges it relevant or you invoke it, which turns "you are asked every time" into an opt-in mode — the shape Kapoor et al. measured failing (N=885: 50% took the bypass, most often those who needed the friction). On a runtime without a hook, grit is a checklist; it is not the thing it claims to be.
 
@@ -157,11 +157,11 @@ It fires before every tool call that can write a file — `Write`, `Edit`, `Note
 | DIY mode — the assistant answers but does not write, enforced by the record | **works** |
 | Daemon, dashboard, per-task verdicts, weekly trend, themes, auto-refresh | **works** |
 | Router — pre-selects *guided* only where a failure was recorded | **works**, as one rule |
-| Onboarding battery and per-concept probe | **deferred** — [ADR 0011](.sdlc/docs/adr/0011-routing-on-a-measured-profile-deferred.md) |
+| Onboarding battery and per-concept probe | **deferred** — [ADR 0011](.sdlc/docs/adr/ADR-0011-routing-on-a-measured-profile-deferred.md) |
 
 **Not planned:** tutorials or lessons (removed — repository tasks are the only evidence), team or hosted features, anything without an executable oracle, cross-user benchmarking, and any claim beyond harm avoidance.
 
-The remaining *risk* is validity: nothing has tested whether a `shipped` concept predicts real capability. If it does not, the levels are noise and the design collapses to a mirror of who typed what — [ADR 0012](.sdlc/docs/adr/0012-profile-validity-is-the-critical-path.md).
+The remaining *risk* is validity: nothing has tested whether a `shipped` concept predicts real capability. If it does not, the levels are noise and the design collapses to a mirror of who typed what — [ADR 0012](.sdlc/docs/adr/ADR-0012-profile-validity-is-the-critical-path.md).
 
 ## Documentation
 
@@ -169,10 +169,12 @@ The remaining *risk* is validity: nothing has tested whether a `shipped` concept
 |------|-----------|
 | [AGENTS.md](AGENTS.md) | **Contributing** — conventions you cannot infer from the code, and the self-checks to run |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, release by release |
-| [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md) | **How it works** — the three processes, the files, the invariants |
-| [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, privacy, what is unproven |
+| [.sdlc/docs/architecture.md](.sdlc/docs/architecture.md) | **How it works** — the three processes, the files, the invariants |
+| [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) | **Why it is shaped this way** — principles, scope, privacy, what is unproven, the evidence in tiers |
 | [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) | **Decision records** — each decision and what was rejected |
-| [.sdlc/docs/LANDSCAPE.md](.sdlc/docs/LANDSCAPE.md) | Competing products, supporting evidence in tiers |
+| [.sdlc/docs/product.md](.sdlc/docs/product.md) | **Product overview** — problem, users, success criteria, alternatives and where Grit fits |
+| [.sdlc/docs/tech.md](.sdlc/docs/tech.md) | Stack, principles, constraints, dependencies |
+| [.sdlc/docs/test-strategy.md](.sdlc/docs/test-strategy.md) | Test levels, gates, what is not automated |
 | [.sdlc/docs/dev-fixtures.md](.sdlc/docs/dev-fixtures.md) | Props for exercising the runtime — not user instructions |
 | [skills/grit/SKILL.md](skills/grit/SKILL.md) | What the assistant does at runtime |
 

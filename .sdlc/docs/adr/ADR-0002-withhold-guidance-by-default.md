@@ -1,6 +1,8 @@
-# ADR 0002 — Withhold guidance by default; grant it narrowly and adaptively
+# ADR-0002: Withhold guidance by default; grant it narrowly and adaptively
 
-- **Status**: Accepted
+## Status
+Accepted
+
 - **Date**: 2026-09-13
 - **Deciders**: Go Frendi
 - **Context tags**: expertise-reversal, scaffolding, guidance, cognitive-load
@@ -42,20 +44,29 @@ Concretely: no uniform step-gating, no blanket per-mission tutorials, and no con
 ## Alternatives Considered
 
 - **Step-gating at every generation** — rejected as default. Evidenced, but on novices and short tasks; contraindicated for experts at mid-range ES 1.72. Retained for concepts *measured* as unfamiliar.
-- **Uniform per-mission tutorials** — rejected. Same reason, and tutorials were the most guidance-dense artifact in the design; they have since been removed ([ADR 0003](0003-repository-work-is-the-only-evidence.md)).
+- **Uniform per-mission tutorials** — rejected. Same reason, and tutorials were the most guidance-dense artifact in the design; they have since been removed ([ADR 0003](ADR-0003-repository-work-is-the-only-evidence.md)).
 - **Withhold everything; never intervene** — rejected. Reduces the product to a mirror and discards the one mechanism with a controlled comparison behind it.
 - **Ask how much guidance the user wants** — partially adopted and bounded. Format, depth, and pace are askable; *whether* guidance is needed is measured.
 
 ## Consequences
+### Positive
+- The product does not impose novice scaffolding on experts, which is the single largest known harm risk in this design space.
+### Negative
+- Adaptivity requires knowing proficiency per concept. That is the critical path (ADR 0012), and if proficiency cannot be inferred, this decision collapses — the design reverts to either uniform scaffolding (which reverses) or none (which is a mirror).
+- **guidance still occurs.** One probe question is asked per unprofiled concept, and the expertise-reversal literature applies to *questions* too. Whether one question falls under the harm threshold is untested.
+### Follow-ups
+- Instrument the probe itself — how often does it fire, and does firing correlate with worse outcomes for high-proficiency users? That is the measurement that would falsify this ADR.
 
-- **Positive**: the product does not impose novice scaffolding on experts, which is the single largest known harm risk in this design space.
-- **Negative**: adaptivity requires knowing proficiency per concept. That is the critical path (ADR 0012), and if proficiency cannot be inferred, this decision collapses — the design reverts to either uniform scaffolding (which reverses) or none (which is a mirror).
-- **Negative**: **guidance still occurs.** One probe question is asked per unprofiled concept, and the expertise-reversal literature applies to *questions* too. Whether one question falls under the harm threshold is untested.
-- **Follow-ups**: instrument the probe itself — how often does it fire, and does firing correlate with worse outcomes for high-proficiency users? That is the measurement that would falsify this ADR.
+## Implements Rules
+- None — no rules are defined for this project yet.
 
-## Backlinks
+## Verification
+- `python3 skills/grit/score.py selftest` — `_check_guidance_needs_a_measured_gap`: *guided* is suggested only where a failure was measured.
+- The probe this ADR's follow-up would instrument is unbuilt, so nothing measures its cost.
+
+## References
 
 - [ADR index](README.md)
-- [ADR 0011 — Routing, deferred](0011-routing-on-a-measured-profile-deferred.md)
-- [ADR 0003 — Repository work is the only evidence](0003-repository-work-is-the-only-evidence.md)
-- [ADR 0012 — The critical path](0012-profile-validity-is-the-critical-path.md)
+- [ADR 0011 — Routing, deferred](ADR-0011-routing-on-a-measured-profile-deferred.md)
+- [ADR 0003 — Repository work is the only evidence](ADR-0003-repository-work-is-the-only-evidence.md)
+- [ADR 0012 — The critical path](ADR-0012-profile-validity-is-the-critical-path.md)
