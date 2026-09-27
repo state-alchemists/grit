@@ -261,7 +261,7 @@ fi
 #
 # zrb reads ~/.claude/settings.json for Claude compatibility as well as its own
 # hooks.json, so registering in both would fire the hook twice on one edit. The
-# hook itself de-duplicates within a 2-second window, which makes that safe —
+# hook de-duplicates identical events (DEDUPE_WINDOW), which makes that safe —
 # but we still register natively per runtime so each works standalone.
 # ---------------------------------------------------------------------------
 hook_dest_dir() {

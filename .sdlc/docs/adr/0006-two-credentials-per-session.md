@@ -34,7 +34,7 @@ The split still left one door open, which real use soon closed. Keeping the page
 | Credential | Goes to | Buys |
 |---|---|---|
 | **report token** | injected into the page | `POST /tutorial/<report>/check`, `.../justification` |
-| **judge token** | printed to the daemon's stderr | `POST /judgment/<judge>` |
+| **judge token** | `serve.py --pending`, and the daemon's stderr | `POST /judgment/<judge>` |
 
 `POST /tutorial/<report>/judgment` returns **403**, not 404 — the page attempting to judge itself is the attack this split exists to stop, and it should be legible in the log rather than look like a typo.
 
@@ -48,10 +48,11 @@ Four supporting rules:
 ## Consequences
 
 - ADR 0005's guarantee is now mechanical rather than stated. The page cannot reach gate 3 with anything it holds.
-- **The judge token must reach the assistant out of band.** Today it is printed to stderr and the assistant runs the `curl` line. This is the honest seam in the design: it works, and it is clearly a v1 mechanism rather than a finished one.
+- **The judge token must reach the assistant out of band.** It was printed only to stderr — which a detached daemon sends to `daemon.log`, which nothing told the assistant to read — once per page load, so after a reload the newest command judged a session with no justification in it. Now `serve.py --pending` reads `sessions.json` (0600, never served) and lists each justification awaiting a verdict with the command for exactly that session, and an untouched session is reused rather than re-minted. It is still out of band, and still a v1 seam.
+- **Gate 1 is reported, not executed, by the daemon.** The check runs in the browser, so its row is labelled `reported-by-page` and carries the code that passed; the judge reads that code before casting gate 3. A page that lies about gate 1 still has to survive a judgment of the code it sent.
 - Anything that talked to the daemon cross-origin stops working. The tutorial template now uses a same-origin relative URL when the daemon served it, and the absolute fallback only applies to a hand-opened `file://` page.
 - `sessions.json` holds live credentials in plaintext under `~/.grit/`. It is mode-`0600` and never transmitted, which is the same boundary the ledger already relies on — one more file inside it, not a new exposure.
-- **The lesson generalises past this bug.** A guarantee written in a docstring is a claim; this repository's whole thesis is that claims are not measurements. `skills/grit/test_serve.py` now pins all six properties, and every case in it is a defect that actually shipped while the README described the daemon as "working and tested."
+- **The lesson generalises past this bug.** A guarantee written in a docstring is a claim; this repository's whole thesis is that claims are not measurements. `skills/grit/test_serve.py` now pins each of these properties, and every case in it is a defect that actually shipped while the README described the daemon as "working and tested."
 - **The first verdict is pinned to the incident that made it.** `test_serve.py`'s gate-3-appends property replays the real sequence — cast `unsound/"test"`, then attempt `sound/"real reasoning"` — and asserts the standing verdict is still `unsound/"test"`, that both verdicts are retained, and that `earned` did not flip.
 
 ## Rejected

@@ -22,7 +22,7 @@ Run:  python3 serve.py [--port N|0] [--host H] [--root DIR]
 from __future__ import annotations
 
 import argparse
-import hashlib
+import html
 import importlib
 import json
 import os
@@ -32,10 +32,10 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import ModuleType
-from typing import Any, Callable, Literal, Optional, cast
+from typing import Any, Callable, Iterator, Literal, Optional, cast
 
 # ── The three gates (ADR 0005) ───────────────────────────────────────────────
 # A concept is earned only when all three hold. Kept explicit so the ordering
@@ -73,22 +73,24 @@ DEFAULT_PREFS: dict[str, Any] = {
     "ask_on_first_edit": True,  # the PreToolUse hook's one prompt per session
     "format": "socratic",
     "depth": "standard",
-    "pace": "one-at-a-time",
     "default_do_it_myself": True,
 }
 
+# Tutorial presentation. tutorial.template.html's CSS understands exactly these,
+# so an unknown value would render as the default while claiming otherwise.
+PREF_CHOICES: dict[str, tuple[str, ...]] = {
+    "theme": THEMES,
+    "depth": ("minimal", "standard", "deep"),
+    "format": ("socratic", "terse"),
+}
 
-# ── Ledger records ───────────────────────────────────────────────────────────
-# These mirror the JSON on disk exactly. They are NOT the storage format — the
-# ledger stays a plain dict tree, because `check_docs.py` reads it as text and
-# older rows must stay readable. These give the shape a name for the code that
-# touches it.
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="grit local daemon")
     ap.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("GRIT_PORT", DEFAULT_PORT)),
+        default=DEFAULT_PORT,
         help="0 picks any free port; the real one is written to daemon.json",
     )
     ap.add_argument(
@@ -105,12 +107,20 @@ def main() -> int:
         action="store_true",
         help="stop the daemon named in <root>/daemon.json",
     )
+    ap.add_argument(
+        "--pending",
+        action="store_true",
+        help="list justifications awaiting gate 3, each with its judge command",
+    )
     args = ap.parse_args()
 
     where = os.path.join(os.path.expanduser(args.root), "daemon.json")
 
     if args.stop:
         return _stop_daemon(where, args.root)
+
+    if args.pending:
+        return _print_pending(args.root)
 
     if args.daemon:
         return _spawn_daemon(args, where)
@@ -121,21 +131,60 @@ def main() -> int:
 def _stop_daemon(where: str, root: str) -> int:
     """Stop the daemon named in <root>/daemon.json."""
     try:
-        with open(where, encoding="utf-8") as fh:
-            pid = json.load(fh)["pid"]
+        pid = _read_json(where, {})["pid"]
         os.kill(pid, signal.SIGTERM)
         print("stopped pid %d" % pid)
-    except (OSError, ValueError, KeyError):
+    except (OSError, KeyError, TypeError):
         print("nothing to stop (no live daemon.json in %s)" % root)
     return 0
 
 
+def _print_pending(root: str) -> int:
+    """Every session whose justification awaits the assistant's verdict, with
+    what to judge and the exact command to judge it.
+
+    This is how the assistant finds gate 3. The judge command used to exist
+    only on the daemon's stderr — which a detached daemon sends to daemon.log,
+    unmentioned anywhere — and one per page load, labelled only by concept, so
+    after a reload the latest printed command judged the wrong session. The
+    judge tokens are read from sessions.json, a 0600 file the page never sees.
+    """
+    root = os.path.expanduser(root)
+    blob = _read_json(os.path.join(root, "sessions.json"), {})
+    report_to_judge = {r: j for j, r in (blob.get("judge_index") or {}).items()}
+    base = (_read_json(os.path.join(root, "daemon.json"), {}) or {}).get("url", "<url>")
+    waiting = [
+        (tok, Session.from_dict(raw))
+        for tok, raw in (blob.get("sessions") or {}).items()
+        if "justification" in (raw.get("gates") or {}) and not raw.get("judgments")
+    ]
+    if not waiting:
+        print("nothing awaits a judgment")
+        return 0
+    for tok, s in sorted(waiting, key=lambda w: w[1].opened):
+        gates = s.gates
+        print("── %s  (%s, session %s, opened %s)" % (s.concept, os.path.basename(s.tutorial), s.sid, s.opened[:16]))
+        print("   prediction:    %s" % (gates["justification"].get("prediction") or "(none given)"))
+        print("   justification: %s" % gates["justification"].get("answer", ""))
+        print("   code that passed the check (as the page reported it):")
+        for line in (gates.get("check", {}).get("code") or "(not sent)").splitlines()[:40]:
+            print("     | " + line)
+        print("   judge with:")
+        print(
+            "     curl -s -X POST %s/judgment/%s -H 'Content-Type: application/json' "
+            "-d '{\"judgment\":\"sound|unsound\",\"message\":\"<why>\"}'"
+            % (base, report_to_judge.get(tok, "<missing>"))
+        )
+    return 0
+
+
 def _spawn_daemon(args: argparse.Namespace, where: str) -> int:
-    """Detach so the dashboard outlives the shell that started it. Closing a
-    terminal should not 404 your own data — that was the single biggest
-    day-to-day friction in this product."""
+    """Detach so the dashboard outlives the shell that started it."""
     import subprocess
 
+    # The log opens before the child's own makedirs, and on a fresh machine
+    # the root does not exist yet — the README's first command crashed here.
+    os.makedirs(os.path.expanduser(args.root), exist_ok=True)
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -173,16 +222,10 @@ def _await_publication(where: str, pid: int) -> Optional[dict[str, Any]]:
     """
     for _ in range(50):
         time.sleep(0.1)
-        try:
-            with open(where, encoding="utf-8") as fh:
-                info = json.load(fh)
-            if info.get("pid") == pid:
-                return info
-        except (OSError, ValueError):
-            pass
+        info = _read_json(where, {})
+        if isinstance(info, dict) and info.get("pid") == pid:
+            return info
     return None
-
-
 
 
 def _serve_foreground(args: argparse.Namespace, where: str) -> int:
@@ -224,13 +267,11 @@ def _bind(args: argparse.Namespace) -> Optional[ThreadingHTTPServer]:
 def _publish_address(
     args: argparse.Namespace, server: ThreadingHTTPServer, where: str
 ) -> str:
-    """Write where we are, so nothing downstream has to assume a port. The
-    assistant, the dashboard link and the judge command all read this instead
-    of hard-coding 7801 — which was wrong the moment anyone passed --port.
+    """Write where we are, so nothing downstream has to assume a port — the
+    assistant, the dashboard link and the judge command all read this file.
 
-    NOTE: a SIGKILL (or a power cut) leaves this file behind pointing at a dead
-    port. Readers should treat it as a hint, not a promise — a failed
-    connection means "start the daemon", not "the daemon is broken".
+    A SIGKILL leaves it behind pointing at a dead port, so readers treat it as
+    a hint: a failed connection means "start the daemon", not "it is broken".
     """
     # --port 0 means the kernel chose; ask the socket what we actually got.
     url = "http://%s:%d" % (args.host, _get_port_of(server))
@@ -253,12 +294,12 @@ def _publish_address(
 def _remove_own_address_file(where: str) -> None:
     """A stale address file sends the next reader to a dead port. Only remove it
     if it is still ours — another daemon may have replaced it."""
-    try:
-        with open(where, encoding="utf-8") as fh:
-            if json.load(fh).get("pid") == os.getpid():
-                os.remove(where)
-    except (OSError, ValueError):
-        pass
+    info = _read_json(where, {})
+    if isinstance(info, dict) and info.get("pid") == os.getpid():
+        try:
+            os.remove(where)
+        except OSError:
+            pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -269,8 +310,8 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("[grit] " + (fmt % args) + "\n")
 
-    def _send_html(self, code: int, html: str) -> None:
-        body = html.encode("utf-8")
+    def _send_html(self, code: int, page: str) -> None:
+        body = page.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -291,7 +332,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             return (
                 "<h1>grit</h1><p>dashboard.html is missing from "
-                + _html_escape(os.path.dirname(path))
+                + html.escape(os.path.dirname(path))
                 + "</p>"
             )
 
@@ -335,6 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             "/profile": self._serve_score,  # alias; score.py owns the profile
             "/status": self._serve_status,
             "/authorship": self._serve_authorship,
+            "/tasks": self._serve_tasks,
             "/themes": self._serve_themes,
             "/tutorials": self._serve_tutorial_list,
             "/ledger": self._serve_ledger,
@@ -363,6 +405,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_authorship(self) -> None:
         self._send_json(200, self.state.authorship())
+
+    def _serve_tasks(self) -> None:
+        self._send_json(200, self.state.tasks())
 
     def _serve_themes(self) -> None:
         self._send_json(200, {"themes": list(THEMES)})
@@ -438,8 +483,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self._resolve_tutorial_path()
         if path is None:
             return self._send_json(404, {"error": "no such tutorial"})
-        html = self._launch_session(path)
-        self._write_html(200, html)
+        self._send_html(200, self._launch_session(path))
 
     def _launch_session(self, path: str) -> str:
         """Open a session for this tutorial and return its HTML with the report
@@ -452,13 +496,14 @@ class Handler(BaseHTTPRequestHandler):
         # {"concept": "token-bucket", "via": "..."}; fall back to the stem so
         # hand-copied tutorials still work.
         concept, via = self.state.resolve_concept(name)
-        token, judge_token = self.state.open_session(concept, path, routing_via=via)
+        token, judge_token, is_new = self.state.open_session(concept, path, routing_via=via)
         base = "http://%s:%d" % (_get_host_of(self.server), _get_port_of(self.server))
-        self._print_judge_command(concept, base, judge_token)
+        if is_new:
+            self._print_judge_command(concept, base, judge_token)
         with open(path, "r", encoding="utf-8") as fh:
-            html = fh.read()
+            page = fh.read()
         # Hand the page its REPORT token without touching the file on disk.
-        return html.replace(
+        return page.replace(
             "</head>",
             "<script>window.GRIT_SESSION="
             + json.dumps(token)
@@ -475,17 +520,6 @@ class Handler(BaseHTTPRequestHandler):
             "-H 'Content-Type: application/json' "
             '-d \'{"judgment":"sound"}\'\n' % (concept, base, judge_token)
         )
-
-    def _write_html(self, code: int, html: str) -> None:
-        """Write a response we built by hand rather than through `_send_html`,
-        which is for static files."""
-        body = html.encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self._cors()
-        self.end_headers()
-        self.wfile.write(body)
 
     def do_POST(self) -> None:
         """Route a write request. Each branch is one named handler."""
@@ -637,7 +671,7 @@ class State:
         return {"version": 1, "entries": []}
 
     def save_ledger(self) -> None:
-        write_send_json(self.ledger_path, self.ledger)
+        _write_json_atomically(self.ledger_path, self.ledger)
 
     # ── Sessions survive a restart ───────────────────────────────────────────
     # Gate 3 is the assistant's verdict and may land minutes or hours after the
@@ -645,22 +679,16 @@ class State:
     # stranded the concept permanently unearned, with no route to fix it except
     # hand-editing the ledger — which ADR 0006 forbids.
     def _load_sessions(self) -> None:
-        if not os.path.exists(self.sessions_path):
-            return
-        try:
-            with open(self.sessions_path, "r", encoding="utf-8") as fh:
-                blob = json.load(fh)
-            self.sessions = {
-                tok: Session.from_dict(raw)
-                for tok, raw in (blob.get("sessions") or {}).items()
-            }
-            self.judge_index = blob.get("judge_index", {})
-        except (json.JSONDecodeError, OSError):
-            self.sessions, self.judge_index = {}, {}
+        blob = _read_json(self.sessions_path, {})
+        self.sessions = {
+            tok: Session.from_dict(raw)
+            for tok, raw in (blob.get("sessions") or {}).items()
+        }
+        self.judge_index = blob.get("judge_index", {})
 
     def _save_sessions(self) -> None:
         """Caller holds the lock. Mode 0600: this file holds live credentials."""
-        write_send_json(
+        _write_json_atomically(
             self.sessions_path,
             {
                 "sessions": {t: s.to_dict() for t, s in self.sessions.items()},
@@ -671,28 +699,27 @@ class State:
 
     # ── Preferences ──────────────────────────────────────────────────────────
     def load_prefs(self) -> dict[str, Any]:
-        if os.path.exists(self.prefs_path):
-            try:
-                with open(self.prefs_path, "r", encoding="utf-8") as fh:
-                    return {**DEFAULT_PREFS, **json.load(fh)}
-            except (json.JSONDecodeError, OSError):
-                pass
-        return dict(DEFAULT_PREFS)
+        return {**DEFAULT_PREFS, **_read_json(self.prefs_path, {})}
 
     def save_prefs(self, patch: Optional[dict[str, Any]]) -> dict[str, Any]:
         prefs = self.load_prefs()
         for key, value in (patch or {}).items():
             if key in DEFAULT_PREFS:  # ignore unknown keys, don't 400
                 prefs[key] = value
-        if prefs.get("theme") not in THEMES:
-            prefs["theme"] = DEFAULT_PREFS["theme"]
-        write_send_json(self.prefs_path, prefs)
+        for key, allowed in PREF_CHOICES.items():
+            if prefs.get(key) not in allowed:
+                prefs[key] = DEFAULT_PREFS[key]
+        _write_json_atomically(self.prefs_path, prefs)
         return prefs
 
     def open_session(
         self, concept: str, tutorial: str, routing_via: Optional[str] = None
-    ) -> tuple[str, str]:
-        """Open a tutorial session. Returns (report_token, judge_token).
+    ) -> tuple[str, str, bool]:
+        """Open a tutorial session. Returns (report_token, judge_token, is_new).
+
+        A session for this tutorial that nothing has been reported to yet is
+        reused: every reload and every second tab used to mint a new one, so
+        sessions piled up and the judge commands for them all looked alike.
 
         `concept` is the concept's identity (e.g. "token-bucket"), NOT a
         filename. `tutorial` is the file it came from. Keeping them separate is
@@ -704,11 +731,16 @@ class State:
         token is injected into the page, and buys only `check` and
         `justification` — the two gates the page legitimately observes. The
         *judge* token never reaches the browser; it is printed to the daemon's
-        stdout for the assistant. With one shared token the page could POST its
+        stderr for the assistant. With one shared token the page could POST its
         own judgment and award itself the third gate, which made ADR 0005's
         guarantee — "the page never writes the ledger" — true in letter and
         worthless in fact.
         """
+        with self.lock:
+            for judge_token, report_token in self.judge_index.items():
+                s = self.sessions.get(report_token)
+                if s and s.tutorial == tutorial and not s.gates and not s.judgments:
+                    return report_token, judge_token, False
         report_token = secrets.token_urlsafe(24)
         judge_token = secrets.token_urlsafe(24)
         with self.lock:
@@ -717,7 +749,7 @@ class State:
             )
             self.judge_index[judge_token] = report_token
             self._save_sessions()
-        return report_token, judge_token
+        return report_token, judge_token, True
 
     def _build_session(
         self, concept: str, tutorial: str, routing_via: Optional[str]
@@ -732,15 +764,10 @@ class State:
             opened=_get_timestamp(),
             gates={},  # gate -> payload
             judgment="pending",
-            # Why this tutorial fired. Without it the ADR 0012 audit cannot tell
-            # whether the battery is the thing mis-routing.
+            # Why this tutorial fired, so a bad route is traceable later.
             routing_via=routing_via or "unknown",
             reports=[],
         )
-
-    def get_session(self, token: str) -> Optional[Session]:
-        with self.lock:
-            return self.sessions.get(token)
 
     def record(
         self, token: str, gate: str, payload: dict[str, Any]
@@ -766,8 +793,10 @@ class State:
                 passed=bool(payload.get("passed")),
                 message=payload.get("message", ""),
                 at=_get_timestamp(),
+                code=str(payload.get("code") or "")[:20000],
             ).to_dict()
-            return "verified-by-execution", None
+            # The check runs in the browser; this process executed nothing.
+            return "reported-by-page", None
         if gate == "justification":
             if not session.gates.get("check", {}).get("passed"):
                 # A justification without a passed check is out of order.
@@ -806,13 +835,11 @@ class State:
         self._save_sessions()
 
     def _score_once_if_final(self, session: Session, entry: dict[str, Any]) -> None:
-        """The bridge the two halves were missing: a tutorial that passes all
-        three gates becomes SANDBOX evidence, so completing one actually moves a
-        score. Keyed on the tutorial so repeating the same exercise decays under
-        the novelty rule (ADR 0009) instead of paying forever.
+        """A tutorial that passes all three gates becomes SANDBOX evidence, keyed
+        on the tutorial so repeating it decays under the novelty rule (ADR 0009).
 
-        Unsound records a failure, not silence — the score model counts failures
-        (ADR 0009), so an unrecorded one reads as "never attempted"."""
+        Unsound records a failure, not silence — an unrecorded one would read
+        as "never attempted"."""
         if session.scored:
             return
         task = os.path.basename(session.tutorial)
@@ -964,6 +991,10 @@ class State:
         gates = entry.get("gates", {})
         if not gates.get("check", {}).get("passed", False):
             return {"status": "unearned", "detail": self._why_check_failed(gates)}
+        if "justification" not in gates:
+            # Checked but not yet explained. "Awaiting judgment" here told the
+            # user the assistant owed them a verdict on something never sent.
+            return {"status": "unearned", "detail": "check passed — justification not submitted"}
         judgment = entry.get("judgment", "pending")
         if judgment == "unsound":
             # Judged and rejected. Saying "awaiting judgment" here would tell a
@@ -1013,15 +1044,12 @@ class State:
         here would be invented. `verify_edit.py` gets a real one per task, from
         git; this view does not pretend to.
         """
-        try:
-            with open(os.path.join(self.root, "projects.json"), encoding="utf-8") as fh:
-                projects = json.load(fh)
-        except (OSError, ValueError):
-            projects = []
-
         out = [
             summary
-            for summary in (self._read_project_log(p) for p in projects)
+            for summary in (
+                self._read_project_log(path, project_dir)
+                for path, project_dir in self._iter_project_dirs()
+            )
             if summary is not None
         ]
         totals = {"lines": 0, "edits": 0, "shell": 0, "offers": 0, "taken": 0}
@@ -1039,9 +1067,38 @@ class State:
             ),
         }
 
-    def _read_project_log(self, path: str) -> Optional[dict[str, Any]]:
+    def _iter_project_dirs(self) -> Iterator[tuple[str, str]]:
+        """(project path, its state directory) for every project the hook has
+        seen. projects.json is the only index: the directories are hashed."""
+        get_project_dir = _import_sibling("verify_edit").get_project_dir
+        for path in _read_json(os.path.join(self.root, "projects.json"), []):
+            yield path, get_project_dir(self.root, path)
+
+    def tasks(self) -> dict[str, Any]:
+        """Every handed-over task's latest verdict, newest first.
+
+        This is the per-task answer to "how much did I do": the verdict comes
+        from git plus the hook log, and the line counts from git, so unlike the
+        authorship view it has a real denominator. A task verified twice shows
+        its latest run; the file keeps every run.
+        """
+        latest: dict[tuple[str, str], dict[str, Any]] = {}
+        for path, project_dir in self._iter_project_dirs():
+            rows = _read_jsonl(os.path.join(project_dir, "tasks.jsonl"))
+            for row in rows:
+                latest[(path, str(row.get("task", "")))] = {**row, "project": path}
+        tasks = sorted(latest.values(), key=lambda r: r.get("at", ""), reverse=True)
+        totals: dict[str, int] = {}
+        for row in tasks:
+            verdict = str(row.get("verdict", "?"))
+            totals[verdict] = totals.get(verdict, 0) + 1
+        return {"tasks": tasks[:20], "totals": totals, "weeks": _count_by_week(tasks)}
+
+    def _read_project_log(
+        self, path: str, project_dir: str
+    ) -> Optional[dict[str, Any]]:
         """One project's authorship summary, or None when it has no log."""
-        log = os.path.join(_get_project_dir(self.root, path), "authorship.jsonl")
+        log = os.path.join(project_dir, "authorship.jsonl")
         if not os.path.exists(log):
             return None
         summary = ProjectAuthorship(project=path)
@@ -1053,8 +1110,10 @@ class State:
                     self._tally_row(summary, raw, offer_sessions, edit_sessions)
         except OSError:
             return None
-        # Sessions where the choice was offered and no assistant edit followed:
-        # the only evidence we have that anyone took it.
+        # Offered, and no file edit happened: neither an unprompted one, nor the
+        # prompted one confirmed by PostToolUse. Without a PostToolUse
+        # registration (older installs) an approved prompted edit with nothing
+        # after it still reads as taken — the inference this used to be.
         summary.taken = len(offer_sessions - edit_sessions)
         return summary.to_dict()
 
@@ -1076,12 +1135,18 @@ class State:
             summary.offers += 1
             offer_sessions.add(row.get("session", ""))
             return
+        if row.get("event") == "applied":
+            edit_sessions.add(row.get("session", ""))
+            return
         if row.get("author") != "assistant":
             return
-        edit_sessions.add(row.get("session", ""))
         if row.get("opaque"):
+            # Not a decline signal: in DIY mode the assistant still runs the
+            # user's tests through the shell.
             summary.shell += 1
             return
+        if not row.get("prompted"):
+            edit_sessions.add(row.get("session", ""))
         summary.edits += 1
         summary.lines += int(row.get("lines") or 0)
         if row.get("file"):
@@ -1096,18 +1161,16 @@ class State:
         `token-bucket.html.meta.json`) supplies both; without one, the stem is
         used as a best guess and provenance is recorded as unknown.
         """
-        sidecar = os.path.join(self.tutorials_dir, tutorial_name + ".meta.json")
-        if os.path.exists(sidecar):
-            try:
-                with open(sidecar, "r", encoding="utf-8") as fh:
-                    meta = json.load(fh)
-                concept = meta.get("concept") or os.path.splitext(tutorial_name)[0]
-                return concept, meta.get("via", "unknown")
-            except (json.JSONDecodeError, OSError):
-                pass
-        return os.path.splitext(tutorial_name)[0], "unknown"
+        stem = os.path.splitext(tutorial_name)[0]
+        meta = _read_json(
+            os.path.join(self.tutorials_dir, tutorial_name + ".meta.json"), {}
+        )
+        return meta.get("concept") or stem, meta.get("via", "unknown")
 
 
+# ── Ledger records ───────────────────────────────────────────────────────────
+# The ledger on disk stays a plain dict tree so rows written by older versions
+# stay readable; these dataclasses only give each gate's shape a name.
 @dataclass(frozen=True)
 class Judgment:
     """One verdict. Append-only: `session["judgments"]` keeps every one ever
@@ -1121,8 +1184,6 @@ class Judgment:
         return {"judgment": self.judgment, "message": self.message, "at": self.at}
 
 
-
-
 @dataclass(frozen=True)
 class CheckGate:
     """Gate 1. `check_type` is always "sandbox" — ADR 0004 forbids a repo check
@@ -1132,6 +1193,7 @@ class CheckGate:
     message: str = ""
     at: str = ""
     check_type: Literal["sandbox"] = "sandbox"
+    code: str = ""  # what passed, as the page sent it — for the judge to read
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1139,9 +1201,8 @@ class CheckGate:
             "check_type": self.check_type,
             "message": self.message,
             "at": self.at,
+            "code": self.code,
         }
-
-
 
 
 @dataclass(frozen=True)
@@ -1162,8 +1223,6 @@ class JustificationGate:
 
     def to_dict(self) -> dict[str, str]:
         return {"answer": self.answer, "at": self.at, "prediction": self.prediction}
-
-
 
 
 @dataclass
@@ -1227,8 +1286,6 @@ class Session:
             judgments=raw.get("judgments", []),
             scored=bool(raw.get("scored", False)),
         )
-
-
 
 
 @dataclass
@@ -1301,8 +1358,8 @@ def _compose_config_notices(root: str, prefs: dict[str, Any]) -> list[dict[str, 
             {
                 "kind": "mechanism-off",
                 "text": (
-                    "Your default is to hand work straight over. Nothing is "
-                    "being offered, and nothing is being scored."
+                    "Your saved default is to hand work straight over. Work "
+                    "done that way is not scored."
                 ),
             }
         )
@@ -1335,7 +1392,7 @@ def _score_profile(root: str) -> dict[str, Any]:
     except Exception as exc:
         return {
             "concepts": {},
-            "headline": {"proven": 0, "recall": 0, "tracked": 0},
+            "headline": {"shipped": 0, "practised": 0, "tracked": 0},
             "error": "%s: %s" % (type(exc).__name__, exc),
         }
 
@@ -1353,7 +1410,54 @@ def _import_sibling(name: str) -> ModuleType:
     return importlib.import_module(name)
 
 
-def write_send_json(path: str, data: Any, mode: Optional[int] = None) -> None:
+def _read_json(path: str, default: Any) -> Any:
+    """The file's JSON, or `default` when it is missing or unreadable. Every
+    file here is optional state, so a bad one degrades rather than raises."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return default
+
+
+def _count_by_week(
+    tasks: list[dict[str, Any]], weeks: int = 8, now: Optional[datetime] = None
+) -> list[dict[str, Any]]:
+    """Verdict counts for each of the last `weeks` ISO weeks, oldest first.
+    Empty weeks are kept: a gap is part of the trend, not missing data."""
+    now = now or datetime.now(timezone.utc)
+    keys = [_week_key(now - timedelta(weeks=n)) for n in range(weeks - 1, -1, -1)]
+    counts: dict[str, dict[str, int]] = {k: {} for k in keys}
+    for row in tasks:
+        at = _parse_iso(row.get("at"))
+        bucket = counts.get(_week_key(at)) if at else None
+        if bucket is not None:
+            verdict = str(row.get("verdict", "?"))
+            bucket[verdict] = bucket.get(verdict, 0) + 1
+    return [{"week": k, "verdicts": counts[k]} for k in keys]
+
+
+def _week_key(when: datetime) -> str:
+    year, week, _ = when.isocalendar()
+    return "%d-W%02d" % (year, week)
+
+
+def _read_jsonl(path: str) -> list[dict[str, Any]]:
+    """Every parseable row. One bad line must not void a project's record."""
+    rows: list[dict[str, Any]] = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return rows
+
+
+def _write_json_atomically(path: str, data: Any, mode: Optional[int] = None) -> None:
     """Write JSON atomically: temp file, then rename.
 
     Every file here is state a crash must not half-write; a truncated
@@ -1367,14 +1471,6 @@ def write_send_json(path: str, data: Any, mode: Optional[int] = None) -> None:
     if mode is not None:
         os.chmod(tmp, mode)
     os.replace(tmp, path)
-
-
-def _get_project_dir(root: str, cwd: str) -> str:
-    """Where a project's own state lives under `root` (a person's ~/.grit).
-    Mirrors hooks/grit-hook.py's helper of the same name — kept independent
-    since the hook has no import path back into this package."""
-    key = hashlib.sha256(os.path.realpath(cwd).encode()).hexdigest()[:16]
-    return os.path.join(root, "projects", key)
 
 
 def _is_hook_active() -> Optional[bool]:
@@ -1432,15 +1528,6 @@ def _get_port_of(server: Any) -> int:
     address = server.server_address
     return address[1] if isinstance(address, tuple) else 0
 
-
-def _html_escape(s: Any) -> str:
-    return (
-        str(s)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
 
 
 if __name__ == "__main__":

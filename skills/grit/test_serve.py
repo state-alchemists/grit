@@ -100,12 +100,73 @@ def main() -> None:
             lambda: _property_stale_pending_shows_its_age(fx, root),
             lambda: _property_mechanism_off_is_visible(fx, root),
             lambda: _property_prediction_reaches_the_judge(fx, root),
+            lambda: _property_detached_daemon_starts_on_a_fresh_root(root),
+            lambda: _property_reload_reuses_an_untouched_session(fx),
+            lambda: _property_pending_names_the_right_session(fx, root),
         ]
         for check in properties:
             check()
         print("ok — %d properties hold" % len(properties))
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def _property_detached_daemon_starts_on_a_fresh_root(root: str) -> None:
+    # `serve.py --root ~/.grit --daemon` is the README's first command, and on
+    # a machine where ~/.grit did not exist yet it crashed opening daemon.log —
+    # the foreground path created the root, the detached one did not.
+    import subprocess
+
+    fresh = os.path.join(root, "not-yet-created")
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serve.py")
+    run = lambda *a: subprocess.run(
+        [sys.executable, script, "--root", fresh, *a], capture_output=True, text=True
+    )
+    started = run("--port", "0", "--daemon")
+    try:
+        assert started.returncode == 0, "--daemon failed on a fresh root: %s" % started.stderr
+        assert os.path.exists(os.path.join(fresh, "daemon.json")), "no address published"
+    finally:
+        run("--stop")
+
+
+def _property_reload_reuses_an_untouched_session(fx: Fixture) -> None:
+    # Every page load minted a session and printed a judge command, so one
+    # tutorial with a reload and a second tab left four sessions and four
+    # look-alike commands — and the newest judged a session with no
+    # justification in it, found by simulating the tutorial path.
+    first = fx.report_token()
+    assert fx.report_token() == first, "a reload opened a second session"
+    _post(fx.base, "/tutorial/%s/check" % first, {"passed": True})
+    assert fx.report_token() != first, "a session with a reported gate must not be handed out again"
+    # And a checked-but-unexplained attempt must not claim a verdict is owed.
+    detail = fx.state.summarise_tutorial("tb.html", fx.state.ledger["entries"])["detail"]
+    assert "justification not submitted" in detail, detail
+
+
+def _property_pending_names_the_right_session(fx: Fixture, root: str) -> None:
+    # The judge command lived only on the daemon's stderr — daemon.log when
+    # detached, which nothing told the assistant to read. `--pending` shows
+    # each justification awaiting a verdict, with the code that passed and the
+    # command that judges exactly that session.
+    import subprocess
+
+    tok = fx.report_token()
+    _post(fx.base, "/tutorial/%s/check" % tok,
+          {"passed": True, "message": "ok", "code": "function solve(){ return 42 }"})
+    _post(fx.base, "/tutorial/%s/justification" % tok, {"answer": "why-42", "prediction": "p"})
+    fx.report_token()  # a second tab after the justification: must not confuse it
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serve.py")
+    out = subprocess.run([sys.executable, script, "--root", root, "--pending"],
+                         capture_output=True, text=True).stdout
+    assert "why-42" in out and "return 42" in out, "pending must show what to judge:\n" + out
+    block = next(b for b in out.split("── ") if "why-42" in b)
+    judge = re.findall(r"/judgment/([\w-]+)", block)
+    assert judge == [fx.judge_token_for(tok)], "pending named the wrong session: %s" % judge
+    # Gate 1 is the page's report; the row must not claim the daemon ran it.
+    row = next(e for e in _get(fx.base, "/ledger")["entries"] if e["gates"].get("check", {}).get("code"))
+    assert row["gates"]["check"]["code"].startswith("function solve"), row
+    assert _get(fx.base, "/ledger")["entries"][-1]["verification"] != "verified-by-execution"
 
 
 def _start_daemon(root: str) -> Fixture:
@@ -158,7 +219,7 @@ def _property_completed_tutorial_scores(fx: Fixture) -> None:
     assert "tb" in prof["concepts"], (
         "an earned tutorial must produce evidence, got %s" % prof
     )
-    assert prof["concepts"]["tb"]["level"] in ("unproven", "recall"), prof
+    assert prof["concepts"]["tb"]["level"] in ("learning", "practised"), prof
     assert (
         prof["concepts"]["tb"]["unaided_tasks"] == 0
     ), "a sandbox pass is not repository work"
@@ -311,6 +372,11 @@ def _property_preferences_round_trip(fx: Fixture) -> None:
         _post(fx.base, "/preferences", {"theme": "../etc"})[1]["theme"]
         == serve.DEFAULT_PREFS["theme"]
     ), "unknown theme must fall back"
+    # Depth and format drive the tutorial's CSS, which knows a fixed set. An
+    # unknown value would render as the default while the file claimed otherwise.
+    saved = _post(fx.base, "/preferences", {"depth": "deep", "format": "terse"})[1]
+    assert saved["depth"] == "deep" and saved["format"] == "terse", saved
+    assert _post(fx.base, "/preferences", {"depth": "huge"})[1]["depth"] == "standard"
 
 
 def _property_prediction_reaches_the_judge(fx: Fixture, root: str) -> None:

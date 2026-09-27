@@ -9,7 +9,7 @@ reads the config by hand, and by then a work session is gone.
 
 So: list every place a registration can hide, and say plainly which ones work.
 
-Usage: _doctor.py [project-dir]
+Usage: doctor.py [project-dir]
 """
 
 from __future__ import annotations
@@ -22,7 +22,10 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+# How grit recognises its own registrations. bin/_wire_hook.py imports these,
+# so the writer and the checker cannot disagree about what "ours" means.
 MARKER = "grit-hook.py"
+ZRB_HOOK_NAME = "grit-authorship"
 
 # A reader pulls (label, command) pairs out of one runtime's config shape.
 # Both runtimes look different on disk and identical after this.
@@ -86,13 +89,14 @@ def _commands_in_claude(path: str) -> list[Entry]:
             data: Any = json.load(fh)
     except Exception:
         return out
-    for group in (data.get("hooks") or {}).get("PreToolUse", []) or []:
-        for h in group.get("hooks", []):
-            cmd = h.get("command", "")
-            args = h.get("args") or []
-            full = " ".join([cmd] + list(args))
-            if MARKER in full:
-                out.append((group.get("matcher", ""), full))
+    for event in ("PreToolUse", "PostToolUse"):
+        for group in (data.get("hooks") or {}).get(event, []) or []:
+            for h in group.get("hooks", []):
+                cmd = h.get("command", "")
+                args = h.get("args") or []
+                full = " ".join([cmd] + list(args))
+                if MARKER in full:
+                    out.append(("%s %s" % (event, group.get("matcher", "")), full))
     return out
 
 
@@ -107,7 +111,7 @@ def _commands_in_zrb(path: str) -> list[Entry]:
         return out
     for h in data:
         cmd = (h.get("config") or {}).get("command", "")
-        if MARKER in cmd or h.get("name") == "grit-authorship":
+        if MARKER in cmd or h.get("name") == ZRB_HOOK_NAME:
             out.append((h.get("name", "?"), cmd))
     return out
 

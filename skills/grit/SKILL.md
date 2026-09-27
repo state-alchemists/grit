@@ -32,7 +32,7 @@ Then stop. Do not offer the 1/2/3 choice, do not probe, do not create tasks. If 
 | Request | Oracle | What you do |
 |---|---|---|
 | "Teach me project management" / "explain systems design" | **none** | decline, then help normally |
-| "Teach me assembly, I have no experience" | a sandbox check you write | **serve it** — tutorial, `--source sandbox`, ceiling of `recall` |
+| "Teach me assembly, I have no experience" | a sandbox check you write | **serve it** — tutorial, `--source sandbox`, ceiling of `practised` |
 | "Add rate limiting to this route" | their own test suite | the full loop |
 
 ### When there is no oracle — decline, do not improvise
@@ -54,10 +54,10 @@ Someone starting from zero has no repository, and that is the *reason* they need
 Nothing needs bending to serve them, because the arithmetic already says the honest thing:
 
 - A sandbox tutorial is worth **0.2**, against **0.5** for real work.
-- Tutorials alone climb toward 1.00 but the *level* stays `recall` **forever** — `proven` is hard-gated on two distinct unaided repository tasks. There is no sequence of exercises that fakes having shipped something.
+- Tutorials alone climb toward 1.00 but the *level* stays `practised` **forever** — `shipped` is hard-gated on two distinct unaided repository tasks. There is no sequence of exercises that fakes having shipped something.
 - Grinding one tutorial plateaus at 0.30. Only *distinct* exercises move the number at all.
 
-So a beginner can earn `recall` and never more, which is exactly true of them. Say that out loud when you start: **an exercise shows you can implement the idea; it does not show you can do it in a real codebase, and the level will say so until you have.**
+So a beginner can earn `practised` and never more, which is exactly true of them. Say that out loud when you start: **an exercise shows you can implement the idea; it does not show you can do it in a real codebase, and the level will say so until you have.**
 
 The grounding rule still applies wherever there is code to ground in — name the real file, the real line. When there is none, a generic exercise is the only option available and it is still honest. It simply earns less, which the model already handles.
 
@@ -95,9 +95,19 @@ The cost of activating wrongly is high and asymmetric: you turn a request for he
 Once activated — before analysis, before code — surface the choice:
 
 > This is work you could do yourself. Which do you want?
-> 1. **You do it** — I'll break it into steps, stay out of the way, and check your work.
-> 2. **I do it, you watch** — I'll narrate the reasoning as I go.
-> 3. **I just do it** — fastest, nothing tracked.
+> 1. **Solo — I'll do it.** You write it. I break it into steps, answer questions, write no code, and check your result.
+> 2. **Guided — walk me through it.** I explain as we go; you still write it.
+> 3. **Hand-off — you do it.** I write it (narrating, if you want). Fastest; nothing is tracked.
+
+Option 1 can earn full credit, option 2 half, option 3 none. Say that once, plainly, then stop talking about it. This is the only menu — do not ask it again later in the loop.
+
+**Pre-select one, from the measurement.** Guess the concepts (reuse names from `score.py concepts`; they get confirmed in step 1) and run:
+
+```sh
+python3 <skill-dir>/score.py level <concept> [<concept>...]
+```
+
+Pre-select its `suggest`. It says `guided` only where a failure was actually recorded on a concept still at `learning`, and `solo` everywhere else — including a concept nobody has measured yet, because guiding someone nobody has shown needs it is its own harm. Name the reason in half a sentence ("you missed this one last time, so I'd walk through it"), never as a judgment. What the user says now overrides the suggestion; so does a saved `default_do_it_myself: false`, which pre-selects option 3.
 
 Rules:
 
@@ -105,13 +115,13 @@ Rules:
 - **Never nag.** One offer. If they pick 3, proceed and do not raise it again.
 - **Never moralise.** No praise for picking 1, no warnings for picking 3. State, take the answer, move on.
 - **Option 3 means stop.** Do not track, measure, or create tasks. Recording someone who opted out is surveillance. Their *standing default* is a different thing and the dashboard does show it — a setting that switches the whole mechanism off should not be invisible — but that is the setting on screen, never the work of a session they declined.
-- **A stored preference is a default, not a policy.** If they've said "always let me do it", open with that pre-selected — but still offer, because circumstances change. What they say now wins.
+- **A stored preference is a default, not a policy.** Read `default_do_it_myself` from `~/.grit/preferences.json` (the dashboard's Settings sets it): `true` pre-selects option 1, `false` pre-selects option 3 — but still offer, because circumstances change. What they say now wins.
 
 ---
 
 ## The loop
 
-Two things can produce a score: **a real task in your repository**, or **a tutorial**. Real work counts for more, and only real work can reach `proven`.
+Two things can produce a score: **a real task in your repository**, or **a tutorial**. Real work counts for more, and only real work can reach `shipped`.
 
 ### 1. Agree the task and name the concepts
 
@@ -131,7 +141,7 @@ Their edit wins. The concept names are theirs, not yours.
 
 A concept name is a database key, and the two ways to get it wrong both fail silently.
 
-**Fragmentation — the dangerous one.** `token-bucket`, `token_bucket`, `token-buckets` and `rate-limit-token-bucket` are four concepts as far as the score is concerned. Evidence splits four ways, so the user does the work four times and **nothing ever reaches `proven`**. They will conclude the product is broken, and they will be right.
+**Fragmentation — the dangerous one.** `token-bucket`, `token_bucket`, `token-buckets` and `rate-limit-token-bucket` are four concepts as far as the score is concerned. Evidence splits four ways, so the user does the work four times and **nothing ever reaches `shipped`**. They will conclude the product is broken, and they will be right.
 
 This is why you check the list first. `score.py record` also warns when a name is close to an existing one — if you see that warning, stop and reuse the existing name unless the user says the two are genuinely different.
 
@@ -152,15 +162,7 @@ Form: lowercase, kebab-case, one to four words, a noun phrase. Not a verb, not a
 
 A good test before you propose one: *could the user do a task in a different codebase next year and honestly call it the same concept?* If yes, it is one concept. If no, qualify it.
 
-### 2. Choose how it will be done
-
-> 1. **I'll do it** — you write it; I answer questions but write no code.
-> 2. **Walk me through it** — I explain as we go; you still write it.
-> 3. **You do it** — I write it. Nothing is scored.
-
-Option 1 can earn full credit, option 2 half, option 3 none. Say that once, plainly, then stop talking about it.
-
-### 3. DIY: answer, never write
+### 2. DIY: answer, never write
 
 While the user is doing it themselves, **do not write the solution** — not a patch, not a "here's roughly what it looks like" block, not a file they can paste. Explain, point at code, name the failure mode, ask what they expect. Questions are free and always have been.
 
@@ -168,17 +170,17 @@ If they ask you to just write it, do it — and say plainly that the concept wil
 
 **You do not enforce this; the record does.** Every byte you write is observed by the hook, so a violation shows up as `assistance: full` whatever anyone intended. Do not rely on that as a licence — rely on it as the reason there is no point pretending.
 
-### 4. Snapshot before they start
+### 3. Snapshot before they start
 
 ```sh
 python3 <skill-dir>/verify_edit.py snapshot <task-id>
 ```
 
-### 5. Check, then ask why
+### 4. Check, then ask why
 
 Run the acceptance check first — executable, not asserted. **Then** ask them to justify the result. A justification before an attempt is a quiz, not a check.
 
-### 6. Verify who wrote it
+### 5. Verify who wrote it
 
 ```sh
 python3 <skill-dir>/verify_edit.py verify <task-id>
@@ -189,12 +191,12 @@ python3 <skill-dir>/verify_edit.py verify <task-id>
 | `HUMAN-WRITTEN` | 0 | `none` if they took no tutorial or hints, else `partial` |
 | `ASSISTED` | 1 | `full` — you wrote part of it, so it scores zero |
 | `NOTHING CHANGED` | 2 | **record nothing.** The check was already green |
-| `UNVERIFIED` | 3 | `full`. Nobody can prove who typed it, so it cannot count as theirs |
+| `UNVERIFIED` | 3 | `full`. Nobody can prove who typed it, so it cannot count as theirs. If it names shell commands whose effect was not observed, the hook predates shell observation: say so and suggest re-running `bin/install.sh` |
 | *(not a verdict)* | 64 | **record nothing, and say why.** The tool could not run — usually no snapshot for that task id. Fix the invocation and re-run; never guess the verdict |
 
 **Never upgrade a verdict.** `UNVERIFIED` is not a synonym for `HUMAN-WRITTEN`.
 
-### 7. Record one event per concept
+### 6. Record one event per concept
 
 Only if the check passed *and* the justification was sound:
 
@@ -203,11 +205,7 @@ python3 <skill-dir>/score.py record <concept> --source repo \
     --assistance none|partial|full --task <task-id> --project <repo-root>
 ```
 
-**`--project` matters.** Task ids are per-project sequences, so `001` in two repositories is two
-different tasks. Without it they collide and count as one task repeated — the user is quietly
-penalised for working in more than one codebase. It defaults to the current directory, which is
-usually right; pass it explicitly when you are not sitting in the repo the work happened in.
-Omit it for `--source sandbox`: a tutorial is the same exercise wherever it runs.
+**`--project` matters.** Task ids are per-project sequences, so `001` in two repositories is two different tasks. Without it they collide and count as one task repeated — the user is quietly penalised for working in more than one codebase. It defaults to the current directory, which is usually right; pass it explicitly when you are not sitting in the repo the work happened in. Omit it for `--source sandbox`: a tutorial is the same exercise wherever it runs.
 
 Use `--source sandbox` for a tutorial, `--failed` when the check failed — a measured failure is evidence too, and it lowers the level.
 
@@ -221,7 +219,7 @@ Use `--source sandbox` for a tutorial, `--failed` when the check failed — a me
 - **none 1.0, partial 0.5, full 0.0** — if you wrote it, it earns nothing.
 - **novelty `1/(1+repeats)`** — the same task or tutorial again is worth half, then a third.
 
-Levels: `unproven` → `recall` at 0.30 → `proven` at 0.80 **and at least two distinct unaided repository tasks**. Grinding one tutorial plateaus at 0.30 — `recall`, never `proven`. Two distinct unaided repository tasks reach 1.00.
+Levels: `learning` → `practised` at 0.30 → `shipped` at 0.80 **and at least two distinct unaided repository tasks**. Grinding one tutorial plateaus at 0.30 — `practised`, never `shipped`. Two distinct unaided repository tasks reach 1.00.
 
 Failures subtract. Evidence older than 90 days counts half. A number that can only rise is not a measurement — say so if they ask why theirs went down.
 
@@ -243,7 +241,7 @@ If the justification is unsound, don't just correct it. Offer a drill on that co
 
 There is no lesson library. "Teach me X" creates a task, not a document.
 
-**You are the generator.** There is no library and no automation: writing a tutorial means *you* author it from `tutorial.template.html`, beside this file — the concept text and a real differential check, per concept. Do that only against a measured gap, scoped to the user's own repository. Never promise a tutorial you are not about to write yourself, and never imply one will appear on its own.
+**You are the generator.** There is no library and no automation: writing a tutorial means *you* author it from `tutorial.template.html`, beside this file — the concept text and a real differential check, per concept. Write one on exactly two triggers: **a measured gap** (`score.py level` says `guided` for that concept, or a check or justification just failed on it), or **a beginner with no repository** asking to learn something a check can decide. For an experienced user working in their own repository, the task itself is the exercise — do not add a tutorial on top. Scope it to their own repository when they have one. Never promise a tutorial you are not about to write yourself, and never imply one will appear on its own.
 
 Each one is a self-contained interactive page where the user writes code and a check runs.
 
@@ -287,11 +285,14 @@ If the file is missing, or connecting fails, the daemon is not running — start
 What you need to know to use it correctly:
 
 - **It binds to localhost only**, and it is the only thing that writes the record. Never hand-edit `ledger.json` or `evidence.jsonl` to make something true. Nothing prevents you — they are files on their disk — but the profile is recomputed from evidence on every read, so there is no stored score to edit, only the evidence underneath it. Forging that changes the number and proves nothing, which is the whole reason the number is derived.
-- **You cast the third gate, and you have a separate credential for it.** Launching a tutorial prints a ready-to-run command to the daemon's terminal. Read the user's justification, decide, then run it:
+- **You cast the third gate, and you have a separate credential for it.** When the user says they have submitted, run:
 
-**Copy the command the daemon printed to its own terminal** — it already contains the correct address and token. Do not assemble your own from memory; the port may not be the default.
+  ```sh
+  python3 <skill-dir>/serve.py --root ~/.grit --pending
+  ```
 
-The tutorial page cannot reach that route — by design, so a page cannot pass itself.
+  It lists every justification awaiting a verdict — the prediction, the answer, the code that passed the check — each with the exact command that judges *that* session. Read all three, decide, and run that session's command with your real reasoning in `message`. Do not assemble your own from memory, and do not take the latest line of `daemon.log`: a second tab opens a second session. The tutorial page cannot reach that route — by design, so a page cannot pass itself.
+- **Gate 1 is the page's report, not an execution you witnessed.** The check runs in the user's browser and the daemon records what the page says. That is why you read the submitted code before judging: a justification for code that could not have passed is unsound whatever the page claimed.
 - **If you can ever judge with a credential the page also holds, stop and report it.** That is the one property the whole design rests on: with a shared credential the page could award itself the third gate, which makes "the page never writes the record" true in letter and worthless in fact. It is a security failure, not a bug to work around — do not proceed with the session, and do not silently compensate by being more careful. Say what you observed.
 - **You get one verdict. Gate 3 appends; it does not replace.** Decide before you POST and write the real reasoning the first time — a second call returns `409` with the standing verdict, records your attempt as a visible amendment, and changes nothing. A verdict you can overwrite is not evidence. If you cast the wrong one, say so plainly and offer a fresh attempt at the tutorial; that opens a new session and produces new evidence. Never imply you can correct the record.
 - **Earned is derived, never declared.** All three gates present, check still passing, judgment sound. Don't describe a concept as earned on any weaker basis.
@@ -316,11 +317,11 @@ Run `python3 <skill-dir>/test_serve.py` before trusting the daemon after a chang
 
 ## Hard limits
 
-- **The user configures this skill. The user does not certify their own proficiency**, and does not get to rule on whether a measurement is valid. Depth, format, pace, theme, default option — all theirs. What they know is not.
+- **The user configures this skill. The user does not certify their own proficiency**, and does not get to rule on whether a measurement is valid. Depth, format, theme, default option — all theirs. What they know is not.
 - **Never claim skill gain.** Avoiding harm is the ceiling.
 - **Never assert authorship you did not verify.** `verify_edit.py` reports what can be proven; "the user wrote this" is not something you can know by remembering.
 - **Never present a sandbox pass as a repository pass.**
-- **If the page's credential can ever cast the third gate, stop.** The two-token split is what makes the record trustworthy; a page that can judge itself makes every ledged entry meaningless. Report it rather than working around it.
+- **If the page's credential can ever cast the third gate, stop.** The two-token split is what makes the record trustworthy; a page that can judge itself makes every ledger entry meaningless. Report it rather than working around it.
 - **Option 3 means stop.** No tracking, no measuring, no nudging.
 - **Say what is unproven.** Whether the profile actually predicts real-world proficiency has not been tested. If the user asks whether this works, the honest answer is that the underlying mechanism is well-supported and this product's own effect has not been measured.
 - **Keep internal engineering history out of what the user sees.** Decision records live in the project's `.sdlc/docs/` for contributors. Never cite them in conversation, in an error message, or in anything rendered on screen. Explain the reason itself if it matters; drop it if it doesn't.

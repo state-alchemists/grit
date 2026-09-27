@@ -20,7 +20,7 @@ Numbers run in reading order, not in the order the decisions were taken: everyth
 | [0008](0008-dashboard-polls-files-it-does-not-push.md) | The dashboard polls files; nothing pushes | Accepted | The end-to-end data path, with a diagram |
 | [0009](0009-graded-score-from-capped-evidence.md) | A graded score, derived from capped evidence | Accepted | How work becomes a level, and why it cannot be farmed |
 | [0010](0010-proficiency-decays-with-inactivity.md) | Proficiency decays with inactivity | Accepted | Whether a stored level stays true |
-| [0011](0011-routing-on-a-measured-profile-deferred.md) | Routing on a measured profile, and why it is deferred | Accepted — **deferred** | How the product *would* decide who needs a tutorial |
+| [0011](0011-routing-on-a-measured-profile-deferred.md) | Routing on a measured profile, and why it is deferred | Accepted — **partly built** | How the product decides who is offered guidance; the battery and probe are unbuilt |
 | [0012](0012-profile-validity-is-the-critical-path.md) | Profile validity is the critical path | Accepted — **unrun** | What must be tested for any of this to mean anything |
 
 **Accepted — deferred** means the decision stands but nothing implements it. **Accepted — unrun** means it specifies a study nobody has done.
@@ -46,18 +46,8 @@ Rejected options are documented inside the ADR that rejected them. The four most
 
 ## Consequences across all ADRs
 
-These follow from the whole set, not from any one decision:
+Most consequences of the set are stated once, where they belong: what is unproven in [DESIGN.md §4](../DESIGN.md) (the unvalidated constants, the judgment gate, sandbox transfer), the weaker sandbox oracle in [0004](0004-interactive-sandbox-tutorials.md), the out-of-band judge credential in [0006](0006-two-credentials-per-session.md), the two-task `shipped` gate in [0009](0009-graded-score-from-capped-evidence.md), the oracle boundary in [0003](0003-grounded-on-demand-tutorials.md). Three belong to no single record:
 
-- **Repository work is the primary evidence source** ([0009](0009-graded-score-from-capped-evidence.md)). Tutorials are a second source that works but is unautomated — each is written by hand, per concept — so in practice most of the score comes from real tasks done unaided.
-- **`proven` requires two distinct unaided repository tasks.** No amount of tutorial repetition reaches it, by construction.
-- **There is no router**, so adaptivity — the thing [0002](0002-withhold-guidance-by-default.md) argues guidance should have — is not implemented. The self-completion offer is uniform, which that ADR argues against. This is the largest gap between the recorded design and the running product.
-- **The product's routing would only be as good as its measurement**, which is unvalidated ([0012](0012-profile-validity-is-the-critical-path.md)). Interactive tutorials are the most guidance-dense artifact in the design, so routing error converts directly into expertise-reversal harm.
-- The honest claim is **harm avoidance, not skill gain**. Bastani et al.'s guardrailed arm was statistically indistinguishable from control. Nothing here shows a tool making anyone better than working unaided.
-- **Two checks exist, with different strength.** A repository check verifies real work; a sandbox check verifies a concept in JavaScript ([0004](0004-interactive-sandbox-tutorials.md)). They are recorded separately and must never be presented as equivalent.
-- **Gate 3 is unreachable from the page** ([0006](0006-two-credentials-per-session.md)), but its credential has to reach the assistant out of band — printed to the daemon's stderr. That seam works and is visibly a v1 mechanism.
-- **The judgment gate is the least reliable thing here.** A concept counts as earned only when a check passes, a justification is submitted, *and* the assistant judges that justification sound ([0005](0005-completion-via-local-daemon.md)). That third gate is a model output with no ground truth. If it is miscalibrated, it either blocks competent users or passes incompetent ones.
-- **A tutorial pass alone can never reach `proven`** ([0009](0009-graded-score-from-capped-evidence.md)). This is [0004](0004-interactive-sandbox-tutorials.md)'s weaker-oracle rule enforced in the data model — and it means an expert who passes an unfamiliar-but-adjacent tutorial stays recorded at `recall`.
-- **The scoring rule is a model of learning, and it is unvalidated.** How evidence maps to proficiency, what repetition is worth, and what decay does are all choices, not measurements. [0012](0012-profile-validity-is-the-critical-path.md)'s concern lives partly in code.
+- **The router is one rule** ([0011](0011-routing-on-a-measured-profile-deferred.md)): guidance is pre-selected only on a recorded failure. That is the adaptivity [0002](0002-withhold-guidance-by-default.md) asks for at its narrowest, and it is still the largest gap between the recorded design and the running product — there is no battery and no probe. Interactive tutorials are where routing errors turn into expertise-reversal harm ([0004](0004-interactive-sandbox-tutorials.md)), which is why a tutorial is written only on the same trigger.
 - **The record is per-machine, not per-person.** One `~/.grit/evidence.jsonl` cannot distinguish two users sharing a machine, and does not follow a user between machines.
-- **The daemon sees the whole ledger in plaintext.** It knows every concept the user has failed, and it stores justifications verbatim. Loopback-only and never transmitted is the entire privacy claim ([DESIGN.md §3](../DESIGN.md)) — it is a real boundary, and it is the only one.
-- **Ungrounded (non-coding) work has no oracle**, so [0003](0003-grounded-on-demand-tutorials.md) cannot hold there and the guarantees are weaker. This must be documented rather than implied.
+- **The daemon holds the whole ledger in plaintext** — every concept failed, every justification verbatim. Loopback-only and never transmitted is the entire privacy claim ([DESIGN.md §3](../DESIGN.md)); it is a real boundary, and it is the only one.

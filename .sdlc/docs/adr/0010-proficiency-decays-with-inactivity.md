@@ -11,7 +11,7 @@ A stored proficiency value raises a question the moment it is written: does it s
 
 Software work changes what people can do, in both directions. A developer who spent a quarter in a framework becomes fluent in it; one who spent a quarter in management may not have written production code at all. A value that never expires reports both as unchanged.
 
-This matters more here than in a typical profile store, because the number is a *claim about capability*. "You are proven at token buckets" on evidence from eighteen months ago is not a measurement — it is a memory presented as one.
+This matters more here than in a typical profile store, because the number is a *claim about capability*. "Shipped: token buckets" on evidence from eighteen months ago is not a measurement — it is a memory presented as one.
 
 This record originally carried a second decision — that a populated profile is *required for routing* — which is deferred with the router it belongs to and decided in [ADR 0011](0011-routing-on-a-measured-profile-deferred.md). Decay is what shipped, and is what this record covers.
 

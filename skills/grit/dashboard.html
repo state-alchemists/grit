@@ -101,8 +101,8 @@ h2{font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.14e
   background:var(--bg2)}
 .tally b{display:block;font:700 1.6rem/1.1 var(--display)}
 .tally span{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
-.tally.proven b{color:var(--ok)} .tally.recall b{color:var(--accent)}
-.tally.unproven b{color:var(--fail)} .tally.stale b{color:var(--warn)}
+.tally.shipped b{color:var(--ok)} .tally.practised b{color:var(--accent)}
+.tally.learning b{color:var(--fail)} .tally.stale b{color:var(--warn)}
 
 /* ── Concept cards ── */
 .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(232px,1fr))}
@@ -110,12 +110,12 @@ h2{font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.14e
   transition:.18s;position:relative;overflow:hidden}
 .node:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:var(--glow)}
 .node.lv-strong{border-left:3px solid var(--ok)}
-.node.lv-recall{border-left:3px solid var(--accent)}
+.node.lv-practised{border-left:3px solid var(--accent)}
 .node.lv-weak{border-left:3px solid var(--fail)}
 .node h3{margin:0 0 8px;font:600 .95rem/1.3 var(--display);word-break:break-word}
 .badge{display:inline-block;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;
   padding:3px 8px;border-radius:20px;border:1px solid currentColor;font-weight:700}
-.badge.strong{color:var(--ok)} .badge.recall{color:var(--accent)}
+.badge.strong{color:var(--ok)} .badge.practised{color:var(--accent)}
 .badge.weak{color:var(--fail)} .badge.stale{color:var(--warn)}
 .meter{height:6px;border-radius:4px;background:var(--border);margin:10px 0 6px;overflow:hidden}
 .meter i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
@@ -174,11 +174,16 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;paddin
   padding:26px;max-width:660px;width:100%;margin:auto;box-shadow:0 20px 70px #0006}
 .card h2{font-size:1.25rem;text-transform:none;letter-spacing:0;color:var(--fg);margin-bottom:4px}
 .field{margin:18px 0}
+.weeks{display:flex;gap:6px;align-items:flex-end;height:64px;margin:6px 0 12px}
+.weeks div{flex:1;display:flex;flex-direction:column-reverse;gap:2px;height:100%;
+  font-size:.62rem;text-align:center;color:var(--muted)}
+.weeks i{display:block;border-radius:3px;min-height:0}
+.weeks .you{background:var(--ok)} .weeks .helped{background:var(--accent)}
 label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
   color:var(--muted);margin-bottom:7px}
-input[type=text]{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);
+input[type=text],.field select{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);
   background:var(--bg2);color:var(--fg);font:inherit}
-input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+input[type=text]:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px}
 .themes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .swatch{border:2px solid var(--border);border-radius:12px;padding:11px;cursor:pointer;
   background:var(--bg2);text-align:left;transition:.15s}
@@ -203,7 +208,7 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <p class="muted" style="font-size:.85rem">Ask your assistant:
        <code>let's do a task — I'll write it myself</code>. It names the concepts, you
        confirm them, you write the code, the check runs, and the concept gets a level.
-       Two distinct tasks done unaided make a concept <b>proven</b>; nothing else does.</p>
+       Two distinct tasks done unaided make a concept <b>shipped</b>; nothing else does.</p>
     <div class="row">
       <label class="toggle muted" style="cursor:default">Appearance is optional and changeable any time.</label>
       <div class="spacer"></div>
@@ -229,7 +234,7 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
     <p style="margin-top:0">Nothing has been measured yet. Two ways to change that:
        ask the assistant for <b>a task you do yourself</b> — write the code, pass the
        check, and the concept lands below — or ask for <b>a tutorial</b> against a
-       measured gap, which caps at <i>recall</i> but still counts.</p>
+       measured gap, which caps at <i>practised</i> but still counts.</p>
   </div>
 
   <div class="panel">
@@ -240,10 +245,10 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
        Run <code>bin/install.sh --doctor</code> to see why.</div>
     <div class="standing">
       <div class="tallies">
-        <div class="tally unproven"><b id="a-lines">0</b><span>lines</span></div>
-        <div class="tally recall"><b id="a-edits">0</b><span>edits</span></div>
+        <div class="tally learning"><b id="a-lines">0</b><span>lines</span></div>
+        <div class="tally practised"><b id="a-edits">0</b><span>edits</span></div>
         <div class="tally stale"><b id="a-shell">0</b><span>shell calls</span></div>
-        <div class="tally proven"><b id="a-taken">0</b><span>you took over</span></div>
+        <div class="tally shipped"><b id="a-taken">0</b><span>you took over</span></div>
       </div>
     </div>
     <div id="authorship"></div>
@@ -251,13 +256,28 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
   </div>
 
   <div class="panel">
+    <h2>Tasks you took on</h2>
+    <div class="standing">
+      <div class="tallies">
+        <div class="tally shipped"><b id="t-human">0</b><span>you wrote</span></div>
+        <div class="tally practised"><b id="t-assisted">0</b><span>assistant helped</span></div>
+        <div class="tally stale"><b id="t-unverified">0</b><span>unverified</span></div>
+      </div>
+    </div>
+    <div class="weeks" id="weeks"></div>
+    <div id="tasks"></div>
+    <footer>Each verdict is <code>verify_edit.py</code>'s, from git and the hook log &mdash; never
+      the assistant's say-so. Line counts are git's, for everything that changed during the task.</footer>
+  </div>
+
+  <div class="panel">
     <h2>Proficiency</h2>
     <div class="standing">
-      <div class="ring" id="ring"><i><b id="ring-pct">0%</b><small>proven</small></i></div>
+      <div class="ring" id="ring"><i><b id="ring-pct">0%</b><small>shipped</small></i></div>
       <div class="tallies">
-        <div class="tally proven"><b id="s-proven">0</b><span>proven</span></div>
-        <div class="tally recall"><b id="s-recall">0</b><span>recall</span></div>
-        <div class="tally unproven"><b id="s-tracked">0</b><span>tracked</span></div>
+        <div class="tally shipped"><b id="s-shipped">0</b><span>shipped</span></div>
+        <div class="tally practised"><b id="s-practised">0</b><span>practised</span></div>
+        <div class="tally learning"><b id="s-tracked">0</b><span>tracked</span></div>
       </div>
     </div>
     <div class="grid" id="concepts"></div>
@@ -288,6 +308,27 @@ footer{margin-top:26px;font-size:.76rem;color:var(--muted);line-height:1.7}
       <div class="themes" id="themes"></div>
     </div>
 
+    <div class="field">
+      <label for="depth">Tutorial depth</label>
+      <select id="depth">
+        <option value="minimal">Minimal — the idea and the exercise</option>
+        <option value="standard">Standard</option>
+        <option value="deep">Deep — start from the failure, then the mechanism</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="format">Tutorial style</label>
+      <select id="format">
+        <option value="socratic">Socratic — questions that lead you there</option>
+        <option value="terse">Terse — the minimum prose</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label class="toggle"><input type="checkbox" id="diy" checked> When I ask for work, default to me writing it</label>
+    </div>
+
     <div class="row">
       <label class="toggle"><input type="checkbox" id="motion" checked> Animations</label>
       <div class="spacer"></div>
@@ -308,7 +349,6 @@ const THEMES = [
   ["arcade",   "Arcade",    "High contrast, bold"],
   ["paper",    "Paper",     "Light, printed, calm"],
 ];
-const RANK = {strong:"Proven", recall:"Recall", weak:"Unproven"};
 const $ = s => document.querySelector(s);
 const escapeHtml = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -360,10 +400,13 @@ function openSetup(firstRun) {
   $("#ob-title").textContent = firstRun ? "Set up your dashboard" : "Settings";
   $("#ob-sub").textContent = firstRun
     ? "Pick a look. It applies as you click, and you can change it any time."
-    : "Change the look. Nothing here affects what is measured.";
+    : "Change the look and how work is offered. Nothing here affects what is measured.";
   $("#ob-cancel").hidden = false;   // always escapable; nothing here is required
   $("#callsign").value = prefs.callsign || "";
   $("#motion").checked = prefs.motion !== false;
+  $("#depth").value = prefs.depth || "standard";
+  $("#format").value = prefs.format || "socratic";
+  $("#diy").checked = prefs.default_do_it_myself !== false;
   buildSwatches(prefs.theme);
   $("#veil").hidden = false;
   ($("#callsign").value ? $("#ob-save") : $("#callsign")).focus();
@@ -396,6 +439,9 @@ $("#ob-save").onclick = async () => {
       theme: picked ? picked.dataset.theme : prefs.theme,
       callsign: $("#callsign").value.trim().slice(0, 32),
       motion: $("#motion").checked,
+      depth: $("#depth").value,
+      format: $("#format").value,
+      default_do_it_myself: $("#diy").checked,
       onboarded: true,
     }),
   }).then(r => r.json());
@@ -405,8 +451,8 @@ $("#ob-save").onclick = async () => {
 };
 
 // ── Render ──────────────────────────────────────────────────────────────────
-const CLS = {proven: "strong", recall: "recall", unproven: "weak"};
-const LEVEL_RANK = {unproven: 0, recall: 1, proven: 2};
+const CLS = {shipped: "strong", practised: "practised", learning: "weak"};
+const LEVEL_RANK = {learning: 0, practised: 1, shipped: 2};
 // Compared against on every render after the first to trigger `.just-leveled`
 // (see the @keyframes rule) — never on the first render, so opening the
 // dashboard doesn't pulse every concept you already had.
@@ -431,7 +477,7 @@ function buildConceptCard(name, c, justLeveled) {
     </dl>
     ${c.blocked_by
       ? `<p class="next"><b>Next</b> &middot; ${escapeHtml(c.blocked_by)}</p>`
-      : `<p class="next"><b>Proven</b> &middot; nothing further is required.</p>`}
+      : `<p class="next"><b>Shipped</b> &middot; nothing further is required.</p>`}
     ${c.decays_in_days !== null && c.decays_in_days <= DECAY_WARN_DAYS
       ? `<p class="decay">◴ evidence starts halving in ${c.decays_in_days} days</p>` : ""}
     <button class="ask" data-concept="${escapeHtml(name)}">Copy a prompt for this</button>
@@ -443,7 +489,7 @@ function buildConceptCard(name, c, justLeveled) {
 const DECAY_WARN_DAYS = 30;
 
 // The grid answers "what should I work on", so it is ordered by that and not
-// by the alphabet: unproven first, and inside each level the highest score
+// by the alphabet: learning first, and inside each level the highest score
 // first, because that is the concept closest to moving.
 function compareByNeed(concepts) {
   return (a, b) =>
@@ -471,11 +517,11 @@ $("#concepts").onclick = async (e) => {
 
 async function render() {
   FAILED.clear();
-  const [profile, ledger, tuts, auth] = await Promise.all([
-    getJSON("/profile"), getJSON("/ledger"), getJSON("/tutorials"),
-    getJSON("/authorship"),
+  const [sc, ledger, tuts, auth, work] = await Promise.all([
+    getJSON("/score", {concepts: {}, headline: {}}), getJSON("/ledger"),
+    getJSON("/tutorials"), getJSON("/authorship"), getJSON("/tasks"),
   ]);
-  const sc = await getJSON("/score", {concepts: {}, headline: {}});
+  renderTasks(work);
 
   // A setting that switches the mechanism off is shown, never inferred from.
   // Silence here is the failure mode the product exists to treat: the record
@@ -498,10 +544,10 @@ async function render() {
   const concepts = sc.concepts || {};
   const names = Object.keys(concepts);
   const hl = sc.headline || {};
-  $("#s-proven").textContent = hl.proven || 0;
-  $("#s-recall").textContent = hl.recall || 0;
+  $("#s-shipped").textContent = hl.shipped || 0;
+  $("#s-practised").textContent = hl.practised || 0;
   $("#s-tracked").textContent = hl.tracked || 0;
-  const ringPct = hl.tracked ? Math.round((hl.proven || 0) / hl.tracked * 100) : 0;
+  const ringPct = hl.tracked ? Math.round((hl.shipped || 0) / hl.tracked * 100) : 0;
   $("#ring").style.setProperty("--pct", ringPct);
   $("#ring-pct").textContent = ringPct + "%";
   const t = auth.totals || {};
@@ -513,8 +559,8 @@ async function render() {
   // how the level is derived, and it is shown after it rather than dropped.
   $("#claim").innerHTML =
     "No XP, no streaks, no levels to grind &mdash; every number here is a measurement, "
-    + "and measurements can go down. A tutorial pass caps at <b>Recall</b>; only real "
-    + "repository work reaches <b>Proven</b>.";
+    + "and measurements can go down. A tutorial pass caps at <b>Practised</b>; only real "
+    + "repository work reaches <b>Shipped</b>.";
   if (sc.note) {
     const note = document.createElement("div");
     note.className = "muted";
@@ -579,7 +625,8 @@ async function render() {
   // nothing again — this one is data-driven instead: it shows on every visit
   // where all three panels are still empty, and clears itself the moment any
   // one of them has something in it.
-  $("#allempty").hidden = !(prefs.onboarded && !ap.length && !names.length && !rows);
+  $("#allempty").hidden = !(prefs.onboarded && !ap.length && !names.length && !rows
+    && !(work.tasks || []).length);
   $("#tutorials").innerHTML = rows
     ? `<table><tr><th>tutorial</th><th>status</th><th>detail</th></tr>${rows}</table>`
     : `<div class="empty"><b>No tutorials yet</b>
@@ -617,6 +664,44 @@ async function render() {
   $("#ledger").innerHTML = led
     ? `<table><tr><th>concept</th><th>outcome</th><th>routed via</th><th>opened</th></tr>${led}</table>`
     : `<div class="empty muted">Nothing recorded yet.</div>`;
+}
+
+// A task's verdict, not a percentage of lines: the assistant's line count is
+// whole-file writes and git's is a diff, so dividing one by the other would
+// invent the very ratio the authorship panel refuses to show.
+const VERDICT_CLASS = {"HUMAN-WRITTEN": "pass", "ASSISTED": "fail"};
+function renderTasks(work) {
+  const totals = work.totals || {};
+  $("#t-human").textContent = totals["HUMAN-WRITTEN"] || 0;
+  $("#t-assisted").textContent = totals["ASSISTED"] || 0;
+  $("#t-unverified").textContent = totals["UNVERIFIED"] || 0;
+  const weeks = work.weeks || [];
+  const peak = Math.max(1, ...weeks.map(w =>
+    (w.verdicts["HUMAN-WRITTEN"] || 0) + (w.verdicts["ASSISTED"] || 0)));
+  $("#weeks").hidden = !weeks.some(w => Object.keys(w.verdicts).length);
+  $("#weeks").innerHTML = weeks.map(w => {
+    const you = w.verdicts["HUMAN-WRITTEN"] || 0, helped = w.verdicts["ASSISTED"] || 0;
+    return `<div title="${escapeHtml(w.week)}: ${you} you wrote, ${helped} assistant helped">
+      <span>${escapeHtml(w.week.slice(-3))}</span>
+      <i class="you" style="height:${you / peak * 46}px"></i>
+      <i class="helped" style="height:${helped / peak * 46}px"></i></div>`;
+  }).join("");
+  const tasks = work.tasks || [];
+  $("#tasks").innerHTML = tasks.length
+    ? `<table><tr><th>task</th><th>project</th><th>verdict</th><th>changed</th>
+       <th>assistant wrote</th><th>when</th></tr>` + tasks.map(t => `<tr>
+         <td>${escapeHtml(t.task)}</td>
+         <td title="${escapeHtml(t.project)}">${escapeHtml(String(t.project || "").split("/").pop())}</td>
+         <td class="${VERDICT_CLASS[t.verdict] || "muted"}">${escapeHtml(t.verdict)}</td>
+         <td class="muted">${t.lines_added === undefined ? "—"
+           : `+${t.lines_added} &minus;${t.lines_removed} in ${t.files_changed} file(s)`}</td>
+         <td class="muted">${t.assistant_lines === undefined ? "not observed"
+           : `${t.assistant_lines} lines, ${t.shell_calls || 0} shell`}</td>
+         <td class="muted">${escapeHtml((t.at || "").slice(0, 16).replace("T", " "))}</td>
+       </tr>`).join("") + `</table>`
+    : `<div class="empty"><b>No tasks handed over yet</b>
+       When you do a task yourself, the assistant snapshots the repo first and verifies it after;
+       each verdict lands here.</div>`;
 }
 
 // The page was a snapshot: it fetched once at load and then went stale while

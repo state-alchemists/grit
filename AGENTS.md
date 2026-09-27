@@ -25,9 +25,9 @@ Conventions for working in this repository that you **cannot get by reading the 
 Almost every defect in this repository's history was found by executing something, and missed by reading it. Reading finds the bug you were already looking for.
 
 ```sh
-python3 skills/grit/test_serve.py      # 15 integrity properties
-python3 hooks/test_hook.py             # 20 hook properties
-python3 skills/grit/score.py selftest  # 21 scoring properties
+python3 skills/grit/test_serve.py      # 18 integrity properties
+python3 hooks/test_hook.py             # 26 hook properties
+python3 skills/grit/score.py selftest  # 10 scoring properties
 python3 bin/test_study_report.py       # 5 study_report properties
 python3 skills/grit/doctor.py          # this machine's hook registrations
 python3 bin/check_docs.py              # every checkable claim in the docs
@@ -77,6 +77,7 @@ New tests follow the same shape. A test here is a **property**, named for what b
 |---|---|
 | Conventions for working here | [AGENTS.md](AGENTS.md) |
 | What it is, how to install | [README.md](README.md) |
+| What changed, per release | [CHANGELOG.md](CHANGELOG.md) — summaries only; the reasoning lives in commits and ADRs |
 | The mechanism — processes, files, data path, invariants | [.sdlc/docs/ARCHITECTURE.md](.sdlc/docs/ARCHITECTURE.md) |
 | The principles and what is unproven | [.sdlc/docs/DESIGN.md](.sdlc/docs/DESIGN.md) |
 | Individual decisions and rejected options | [.sdlc/docs/adr/](.sdlc/docs/adr/README.md) |
@@ -88,7 +89,7 @@ Before adding a document, find the one that already owns that layer. `ARCHITECTU
 
 **Decline a generated rules or conventions file under `.sdlc/`.** Tooling offers to write one; it is a second owner for the first row. Point the tool at AGENTS.md instead. The exception is `.sdlc/CONVENTIONS.md`, which documents the skill suite's own protocol rather than how to work here — it owns its own row, and nothing about this repository belongs in it.
 
-**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks twelve classes — and the count is `len()` of the list it runs, not a number in a string: paths and links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts, **computed values**, **cross-doc agreement**, **ADR citations**, **section citations**, and ADR index statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The last three classes exist because a prose number, a disagreement between two files, and a citation to a renumbered ADR each slipped past everything else.
+**A claim in a doc should be one `bin/check_docs.py` can verify.** It checks thirteen classes — and the count is `len()` of the list it runs, not a number in a string: paths and links, runtime files, routed endpoints, CLI flags, scoring constants, verdict names, test counts (each against the suite named on its line), **hook constants**, **computed values**, **cross-doc agreement**, **ADR citations**, **section citations**, and ADR index statuses. When you fix a stale claim, ask whether a checker class would have caught it — and if not, add one. The later classes exist because a prose number, a disagreement between two files, a citation to a renumbered ADR, and a "2-second" window the hook had narrowed to 250ms each slipped past everything else.
 
 ---
 

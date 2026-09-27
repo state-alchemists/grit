@@ -514,7 +514,9 @@ document.getElementById("check").onclick = async () => {
     outEl.className = "pass";
     outEl.textContent = "✓ " + result.message;
     // Gate 1 of 3: the check. Reporting it does not complete the concept.
-    report("check", { concept: document.title, passed: true, message: result.message });
+    // The code rides along so the judge can read what actually passed.
+    report("check", { concept: document.title, passed: true, message: result.message,
+                      code: codeEl.value });
     document.getElementById("justify").style.display = "block";
     document.getElementById("justify").scrollIntoView({ behavior: "smooth", block: "nearest" });
   } else {

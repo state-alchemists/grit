@@ -80,7 +80,7 @@ def q2_frequent_vs_rare(rows: list[S.EvidenceRow]) -> tuple[Bucket, Bucket]:
     """Q1's same split, run separately for concepts with >= FREQUENT_AT total
     events (in the whole log) vs. fewer. The risk ADR 0012 names is structural:
     an expert who simply has not done two scoreable tasks recently reads as
-    `recall` forever, which would show up here as the frequent set predicting
+    `practised` forever, which would show up here as the frequent set predicting
     worse than the rare set despite (presumably) equal or better real skill.
     """
     totals: dict[str, int] = defaultdict(int)

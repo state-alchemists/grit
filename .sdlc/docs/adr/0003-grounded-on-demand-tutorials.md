@@ -39,13 +39,13 @@ Three entry points, in order of support:
 
 - **Open on-demand lessons, no task** — rejected. The most useful-feeling option and the least supported; also the exact self-report asymmetry ADR 0011 rejects.
 - **Gap-triggered only, no on-demand at all** — rejected as too restrictive. Users legitimately want to learn things their current work does not require; grounding keeps this while preserving the check.
-- **Build a persistent tutorial library over time** — rejected. Cached tutorials are reused per concept (a performance optimisation), but browsing is a different product with different evidence, and mixing them drifts the design.
+- **Build a persistent tutorial library over time** — rejected. Reusing a tutorial per concept would be a performance optimisation (nothing caches today), but browsing is a different product with different evidence, and mixing them drifts the design.
 
 ## Consequences
 
 - **Positive**: no artifact exists in the product whose value is unverifiable. Every tutorial terminates in a check and a justification.
 - **Negative**: on-demand feels heavier than browsing. The user asked to learn something and was handed work — correct on the evidence, worse as a demo.
-- **Negative**: in **ungrounded domains** (non-coding), there is no oracle, so this ADR cannot hold. General mode carries a weaker guarantee and the documentation must say so rather than let the coding guarantee appear to transfer.
+- **Negative**: where there is **no executable oracle** (project management, systems design), this ADR cannot hold, so the skill declines to track that work rather than claim a weaker guarantee. The line is the oracle, not the domain: a beginner with no repository is still served by a sandbox check ([DESIGN.md §2](../DESIGN.md)).
 - **Follow-ups**: measure whether grounded on-demand outperforms gap-triggered (Q4 in the study).
 
 ## Backlinks

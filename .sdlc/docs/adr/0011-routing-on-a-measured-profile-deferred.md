@@ -1,6 +1,6 @@
 # ADR 0011 — Routing on a measured profile, and why it is deferred
 
-- **Status**: Accepted — **deferred**, nothing implements it
+- **Status**: Accepted — **partly built**: a default from measured failures; no battery, no probe
 - **Date**: 2026-09-13 (revised 2026-09-14)
 - **Deciders**: Go Frendi
 - **Context tags**: routing, measurement, profiling, onboarding, psychometrics, expertise-reversal
@@ -62,11 +62,11 @@ The battery is adaptive, spans a range of item difficulty, and has a deliberate 
 
 What the deferral costs, stated plainly rather than discovered later:
 
-- **There is no router.** The skill offers the self-completion choice on every activation; it does not decide, from a measurement, who needs a tutorial. The offer is uniform, which is the thing this ADR argued against.
+- **The router is a single rule.** `score.py level` pre-selects *guided* only where a failure was recorded on a concept still at `learning`, and *solo* everywhere else (`suggest_mode`). It routes on measurement and never on a claim, as decided above — but with no probe, an unprofiled concept falls to the no-guidance default of [ADR 0002](0002-withhold-guidance-by-default.md) rather than to a question. It only pre-selects: the three-way offer is still made every time.
 - **There is no probe.** An unprofiled concept produces no question, so the retrieval-practice benefit above is not being collected.
 - **First run is empty and stays empty until you do work.** That is honest, and it is worse as a demo than a battery would be.
 
-The decision stands as the design position. If routing is built, it is built this way.
+The decision stands as the design position. If more routing is built, it is built this way.
 
 ## Consequences
 

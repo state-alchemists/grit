@@ -1,10 +1,6 @@
 # Design
 
-The principles the product is built on, and the limits it has not escaped.
-
-**This is not the mechanism.** For how the pieces actually fit together — the three processes, the files, the data path, the invariants — read [ARCHITECTURE.md](ARCHITECTURE.md). For individual decisions and what was rejected, read [`adr/`](adr/README.md). This file is the layer above both: the rules that constrain every decision, and the things still unproven.
-
-> An earlier version of this document also carried the on-disk layout and the data contracts. It drifted: it documented `profile.json`, `tasks.json`, `checks/` and `missions/`, none of which any code writes, and never mentioned `evidence.jsonl` or `authorship.jsonl`, which carry all the real data. Mechanism now lives in one place, because two descriptions of one system means one of them is wrong and you cannot tell which.
+The principles the product is built on, and the limits it has not escaped — the layer above both the mechanism ([ARCHITECTURE.md](ARCHITECTURE.md)) and the individual decisions ([`adr/`](adr/README.md)). It deliberately carries no file layout or data contract: those live in ARCHITECTURE.md alone.
 
 ---
 
@@ -62,7 +58,7 @@ Never promise growth. The ceiling is harm avoidance, and saying so is not modest
 
 The exclusion is the oracle, not the domain, and stating it as "non-coding domains" was wrong in a way that cost real users. Everything here rests on a check that runs and either passes or fails. Project management has no `npm test`; without one the first gate degrades to *"the user says they understand"*, which is the self-report the whole design replaces, and one fictional row makes the record worthless. That argument disqualifies project management. It does not disqualify a subject merely because the person asking has no repository yet — a sandbox exercise with a real differential check is an oracle, whoever is sitting in front of it.
 
-Read as "non-coding domains", the rule turned away beginners, who are the population [the novice study on the front page](../../README.md#the-problem) found were harmed most. The scoring model never needed them turned away: a sandbox source is worth 0.2 against 0.5, and no quantity of exercises reaches `proven`, which is gated on two distinct unaided repository tasks. Sandbox work tops out at `recall` and goes no further, which is a true statement about someone who has not yet shipped any of it.
+Read as "non-coding domains", the rule turned away beginners, who are the population [the novice study on the front page](../../README.md#the-problem) found were harmed most. The scoring model never needed them turned away: a sandbox source is worth 0.2 against 0.5, and no quantity of exercises reaches `shipped`, which is gated on two distinct unaided repository tasks. Sandbox work tops out at `practised` and goes no further, which is a true statement about someone who has not yet shipped any of it.
 
 ---
 
@@ -82,14 +78,14 @@ This is a hard boundary, not a preference: **a tool that profiles your weaknesse
 
 Stated here rather than left to be discovered.
 
-1. **Does a `proven` concept predict real capability?** Nothing validates the level against later performance. This is the critical path and it is unrun — [ADR 0012](adr/0012-profile-validity-is-the-critical-path.md).
+1. **Does a `shipped` concept predict real capability?** Nothing validates the level against later performance. This is the critical path and it is unrun — [ADR 0012](adr/0012-profile-validity-is-the-critical-path.md).
 2. **The scoring constants are judgement, not measurement.** `0.5`, `0.2`, `0.30`, `0.80`, the `1.5×` cap, two-unaided-tasks — every one is a choice. They are internally consistent and satisfy the stated requirements; none is calibrated against an outcome.
 3. **`assistance: partial` is self-reported.** The hook proves who typed the bytes; it cannot see whether the user read a tutorial first. This is the one soft coefficient in the model.
 4. **The judgment gate is unvalidated.** A concept counts as earned only when the assistant judges the justification sound, and there is no ground truth for that judgment. It is *measurable* — judge-sound answers that later fail on the same concept would falsify it — but it has not been measured, and it is load-bearing.
 5. **Retention is unmeasured.** Only behaviour at the time is observable. Nothing here measures what you can still do in a month, which is the outcome the product is named for.
 6. **Sandbox tutorials may not transfer.** Passing a JavaScript exercise about token buckets is not evidence you can implement one in Go. The weights encode a guess at the gap, not a finding.
 7. **Population transfer.** The mechanism evidence is from novices. The one study in the target population — METR, 16 experienced developers — measured speed, not skill.
-8. **The offer itself has a bypass, and bypasses are taken by the people who need them least.** Kapoor et al. (2025, N=885) measured a three-way mode choice with a "See Solution" escape: 50% took it, and the lower-performing students took it most. That design is recorded as a rejected alternative in [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md), and the skill still opens with a three-way choice. The defence is real but narrow — 0011 rejects routing on *what the user claims to know*, and this asks *what they want to do*, with the score measured either way — so nothing here is self-certified. What is unproven is whether that distinction survives contact with a deadline. The replacement, routing on a measured profile, is deferred and unbuilt.
+8. **The offer itself has a bypass, and bypasses are taken by the people who need them least.** Kapoor et al. (2025, N=885) measured a three-way mode choice with a "See Solution" escape: 50% took it, and the lower-performing students took it most. That design is recorded as a rejected alternative in [ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md), and the skill still opens with a three-way choice. The defence is real but narrow — 0011 rejects routing on *what the user claims to know*, and this asks *what they want to do*, with the score measured either way — so nothing here is self-certified. What is unproven is whether that distinction survives contact with a deadline. Routing on a measured profile exists only as one rule — guidance is pre-selected on a recorded failure — and does not remove the choice.
 9. **Concept names are chosen in conversation.** They are the schema, and two people naming the same idea differently produce incomparable records. Mitigated by a near-duplicate warning; not solved.
 
 ---

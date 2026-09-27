@@ -2,7 +2,7 @@
 
 Survey of products and research adjacent to Grit, with an honest account of what is already solved and what is not. Verdict codes: **EXACT** (all four of Grit's steps), **PARTIAL** (2–3 steps), **ADJACENT** (1 step or neighbouring idea).
 
-**Bottom line (corrected): products DO exist in this space, and an earlier version of this document wrongly said they did not.** The individual-facing anti-atrophy tools were missed on the first pass — see [§6a](#6a-correction--products-do-occupy-this-space) for Chestnut, `atrophy`, Lathe, and devatrophy.com. The opening is not "nobody built this"; it is that **nobody closes the measurement loop or enforces the AI-off signal.**
+**Bottom line: products do exist in this space** — Chestnut, `atrophy`, Lathe and devatrophy.com ([§6a](#6a-correction--products-do-occupy-this-space); a first pass missed them). The opening is not "nobody built this"; it is that **nobody closes the measurement loop or enforces the AI-off signal.**
 
 The strongest design-relevant evidence is not here but in [ADR 0002](adr/0002-withhold-guidance-by-default.md) — in particular the **expertise reversal effect**, which says uniform scaffolding for experienced developers is contraindicated.
 
@@ -170,14 +170,9 @@ Addy Osmani, ["Avoiding Skill Atrophy in the Age of AI"](https://addyo.substack.
 
 ---
 
-## 6. The gaps Grit fills
+## 6. Where Grit fits
 
-Four parts of the concept have **no existing product**:
-
-1. **Missions generated from a mutually-approved plan, specifically to grow the human's skill.** HagiCode and Claude Code plan mode both give plan→approval→execution, but decompose for *task throughput*, not skill-building.
-2. **A per-mission optional tutorial attached to live, real-repo work.** Tutorials exist only inside fixed curricula (Boot.dev, Codecademy). Plan-derived, per-mission tutorials for your own codebase: **Chestnut does this** — see §6a, which corrects this section.
-3. **The explicit three-way choice — follow tutorial / attempt directly / let AI auto-solve — as a first-class, per-mission UI.** The pieces exist on opposite sides of the fence (Socratic hint modes on one side, auto-solve agents on the other), but no product presents them as one selectable triad.
-4. **Gamification of the *human developer's* skill progression during real work.** HagiCode gamifies the agents; Task Quest and MainQuest gamify generic tasks; none gamify the human coder's missions tied to real commits.
+The first pass of this survey claimed four gaps no product filled: missions generated from a mutually-approved plan, per-mission tutorials attached to real-repo work, a first-class per-mission three-way choice (tutorial / attempt / auto-solve), and gamification of the human's own progression. The second was simply wrong — Chestnut does it (§6a). The other three describe Grit's *original* per-mission design, which was abandoned: the three-way per-mission choice is the design Kapoor et al. measured failing ([ADR 0011](adr/0011-routing-on-a-measured-profile-deferred.md)), and an accumulated progression score is farmable ([ADR 0009](adr/0009-graded-score-from-capped-evidence.md)). What Grit actually occupies is the opening §6a describes.
 
 ### Nearest neighbours, summarized
 
@@ -230,8 +225,4 @@ The Kapoor row is the uncomfortable one: the closest published match to Grit's o
 - **Fast-moving field:** Claude learning mode and ChatGPT Study Mode launched 2025–2026 and change between releases. Descriptions reflect the cited pages, not a live test.
 - **Codefetch limits:** Exercism and Scrimba homepages returned 403 / JS-only bodies; pnas.org and mdpi.com also blocked automated fetch and were verified via search snippets and secondary full text.
 
-### How these errors happened
-
-The landscape survey was delegated to a research sub-agent tasked with finding *products*, not verifying *papers*. It compiled citations from search snippets without reading populations or findings, and the "52 professional programmers" framing was then written into the design docs by hand without checking the abstract. Kapoor et al. was cited from its title — "optional guardrails" — without reading that the study measures their failure.
-
-The lesson for this repository: **a citation is not verified until its abstract has been read.** Titles and snippets are not evidence.
+**A citation is not verified until its abstract has been read.** Every correction above came from a first pass that compiled citations from titles and search snippets — Kapoor et al. was cited from the phrase "optional guardrails" without reading that the study measures their failure.

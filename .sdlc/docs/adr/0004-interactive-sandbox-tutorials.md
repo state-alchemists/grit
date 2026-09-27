@@ -15,7 +15,7 @@ This creates a real tension with ADR 0002 and ADR 0003 that must be stated rathe
 
 **Against ADR 0002:** an interactive tutorial is the most *guidance-dense* artifact in the entire design. It is scaffolding, step structure, and explicit instruction — everything the expertise reversal effect says is redundant and costly for a proficient user. The defence is that ADR 0002's policy is *narrow* and *adaptive*: the tutorial fires only on measured unfamiliarity with the specific concept. An interactive sandbox for a concept you have demonstrated you don't know is not the harm case. An interactive sandbox for a concept you do know is, and ADR 0011 exists to prevent it.
 
-**Against ADR 0003:** the check runs in a JavaScript sandbox, not against the user's repository. The user's actual code is Go, or Python, or Rust. A token refill implemented in JavaScript and verified in JavaScript is **synthetic** — it is a check, but it is not their check.
+**Against ADR 0003:** the check runs in a JavaScript sandbox, not against the user's repository. (The *user's* code need not be JavaScript — a check can take the textarea as raw source and interpret it — but the check itself is.) The user's actual code is Go, or Python, or Rust. A token refill implemented in JavaScript and verified in JavaScript is **synthetic** — it is a check, but it is not their check.
 
 ## Decision
 
@@ -38,7 +38,7 @@ This creates a real tension with ADR 0002 and ADR 0003 that must be stated rathe
 
 - **Positive**: tutorials are executed, not read, and the check is immediate. The strongest supported interaction is the default.
 - **Negative**: **the sandbox is a weaker oracle than the repository.** A user can pass a JavaScript rate-limiter exercise and still be unable to implement one in their Go service. The measurement layer must record which kind of check closed a task and must not treat them as equivalent.
-- **Negative**: sandbox exercises must be *authored*, and a bad exercise teaches a bad lesson. The item bank for tutorials is a maintenance burden with the same staleness risk as the concept taxonomy (§ Design 7.5).
+- **Negative**: sandbox exercises must be *authored*, and a bad exercise teaches a bad lesson. The item bank for tutorials is a maintenance burden with the same staleness risk as concept naming ([DESIGN.md §4](../DESIGN.md), item 9).
 - **Negative**: this is the guidance-densest artifact in the product. If routing is ever built ([ADR 0011](0011-routing-on-a-measured-profile-deferred.md)) and is even slightly wrong, this is the component that converts routing error into expertise-reversal harm. Today nothing routes, so every tutorial is delivered on a measured gap or not at all. **ADR 0012 is a harder prerequisite because of this decision, not a softer one.**
 - **Follow-ups**: does a sandbox pass transfer to repository performance on the same concept? That is a specific, cheap test and it is not in the current study. It should be added to Q1.
 

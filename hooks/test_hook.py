@@ -129,6 +129,12 @@ def _properties():
         _property_missing_script_cannot_block,
         _property_offer_is_recorded_distinctly,
         _property_fresh_repo_with_hook_scores,
+        _property_declined_offer_counts_as_taken,
+        _property_post_tool_use_confirms_without_counting,
+        _property_verdicts_are_recorded_per_task,
+        _property_installer_registers_and_removes_both_events,
+        _property_distinct_shell_calls_are_not_merged,
+        _property_observed_shell_calls_do_not_void_the_task,
     ]
 
 
@@ -606,6 +612,230 @@ def _property_fresh_repo_with_hook_scores(fx: HookFixture) -> None:
     finally:
         shutil.rmtree(repo2, ignore_errors=True)
         shutil.rmtree(root2, ignore_errors=True)
+
+
+def _property_declined_offer_counts_as_taken(fx: HookFixture) -> None:
+    # `taken` — the dashboard's "you took over" tile — was 0 on every machine
+    # that ever ran this. The hook logged the edit that raised the offer as an
+    # assistant edit in the same session, and `taken` is "offered, and no
+    # assistant edit followed", so no session could ever qualify.
+    root = tempfile.mkdtemp(prefix="grit-taken-root-")
+    proj = tempfile.mkdtemp(prefix="grit-taken-")
+    try:
+        f = HookFixture(root=root, proj=proj)
+        # Declined: the one prompted edit, then only shell (the assistant
+        # running the user's tests), which is the DIY case working.
+        f.run(f.write_event(session="declined"))
+        f.run(f.event("Bash", session="declined", command="npm test"))
+        # Approved: the assistant carried on writing files.
+        f.run(f.write_event(session="approved"))
+        f.run(f.write_event(name="b.py", content="more\n", session="approved"))
+        # Approved, and nothing after it. Only PostToolUse can tell this from
+        # declined — the inference alone read it as taken.
+        quiet = f.write_event(name="c.py", session="quiet")
+        f.run(quiet)
+        f.run(dict(quiet, hook_event_name="PostToolUse"))
+
+        skill = os.path.join(os.path.dirname(os.path.dirname(HOOK)), "skills", "grit")
+        sys.path.insert(0, skill)
+        import serve
+
+        totals = serve.State(root).authorship()["totals"]
+        assert totals["offers"] == 3, totals
+        assert totals["taken"] == 1, "only the declined session was taken: %s" % totals
+        # The prompted edit still counts as the assistant's — PreToolUse fires
+        # before the answer, and over-counting the assistant is the safe side.
+        assert totals["edits"] == 4 and totals["shell"] == 1, totals
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(proj, ignore_errors=True)
+
+
+def _property_post_tool_use_confirms_without_counting(fx: HookFixture) -> None:
+    # PostToolUse carries the same tool_input as the PreToolUse before it. If
+    # it were read as an edit, every write would count twice; if it could ask,
+    # the user would be prompted after the fact.
+    root = tempfile.mkdtemp(prefix="grit-post-root-")
+    proj = tempfile.mkdtemp(prefix="grit-post-")
+    try:
+        f = HookFixture(root=root, proj=proj)
+        edit = f.write_event(session="p1")
+        f.run(edit)
+        assert f.run(dict(edit, hook_event_name="PostToolUse")) == "", "a post event asked"
+        assert f.count_rows() == 1, "the post event was counted as authorship"
+        applied = [r for r in f.rows(author="grit") if r.get("event") == "applied"]
+        assert len(applied) == 1, "the post event was not recorded: %s" % applied
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(proj, ignore_errors=True)
+
+
+def _property_verdicts_are_recorded_per_task(fx: HookFixture) -> None:
+    # A verdict used to exist only as an exit code and an evidence row, so the
+    # dashboard could not say which tasks the user did and which the assistant
+    # did. The record is written by verify_edit itself, never by the assistant.
+    repo = tempfile.mkdtemp(prefix="grit-tasks-")
+    root = tempfile.mkdtemp(prefix="grit-tasks-root-")
+    try:
+        _init_repo(repo)
+        _verify_edit_cmd(repo, "snapshot", "t1", root=root)
+        with open(os.path.join(repo, "new file.py"), "w") as fh:
+            fh.write("a=1\nb=2\n")
+        open(os.path.join(repo, "a.py"), "a").write("c=3\n")
+        _verify_edit_cmd(repo, "verify", "t1", root=root)
+        _verify_edit_cmd(repo, "verify", "t1", root=root)  # a re-run appends
+
+        log = os.path.join(get_project_dir(root, repo), "tasks.jsonl")
+        runs = [json.loads(line) for line in open(log)]
+        assert len(runs) == 2, "a re-verify must append, never rewrite: %s" % runs
+        # 2 lines in an untracked file (with a space in its name) + 1 tracked.
+        assert runs[-1]["lines_added"] == 3 and runs[-1]["files_changed"] == 2, runs[-1]
+
+        skill = os.path.join(os.path.dirname(os.path.dirname(HOOK)), "skills", "grit")
+        sys.path.insert(0, skill)
+        import serve
+
+        state = serve.State(root)
+        _write_projects(root, [os.path.realpath(repo)])
+        view = state.tasks()
+        assert len(view["tasks"]) == 1, "the view shows each task's latest run once"
+        assert sum(view["totals"].values()) == 1, view["totals"]
+        # The trend keeps empty weeks — a gap is part of it — and counts each
+        # task once, in the week of its latest run.
+        assert len(view["weeks"]) == 8, view["weeks"]
+        assert sum(sum(w["verdicts"].values()) for w in view["weeks"]) == 1, view["weeks"]
+        assert view["weeks"][-1]["verdicts"], "this week's task is missing"
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _write_projects(root: str, paths: list[str]) -> None:
+    with open(os.path.join(root, "projects.json"), "w") as fh:
+        json.dump(paths, fh)
+
+
+def _property_installer_registers_and_removes_both_events(fx: HookFixture) -> None:
+    # PostToolUse is what makes "taken" an observation. An install that wrote
+    # only PreToolUse would silently fall back to the inference; an uninstall
+    # that removed only PreToolUse would leave a hook behind in the user's file.
+    wire = os.path.join(os.path.dirname(os.path.dirname(HOOK)), "bin", "_wire_hook.py")
+    tmp = tempfile.mkdtemp(prefix="grit-wire-")
+    try:
+        cfg = os.path.join(tmp, "settings.json")
+        with open(cfg, "w") as fh:
+            json.dump({"hooks": {"PostToolUse": [{"matcher": "X", "hooks": [
+                {"type": "command", "command": "echo mine"}]}]}}, fh)
+        sp.run([sys.executable, wire, "claude", cfg, HOOK, "install"], check=True,
+               capture_output=True)
+        hooks = json.load(open(cfg))["hooks"]
+        assert len(hooks["PreToolUse"]) == 2 and len(hooks["PostToolUse"]) == 3, hooks
+        sp.run([sys.executable, wire, "claude", cfg, HOOK, "remove"], check=True,
+               capture_output=True)
+        hooks = json.load(open(cfg))["hooks"]
+        assert "PreToolUse" not in hooks, hooks
+        assert [g["matcher"] for g in hooks["PostToolUse"]] == ["X"], (
+            "uninstall touched a hook that is not ours: %s" % hooks
+        )
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _property_distinct_shell_calls_are_not_merged(fx: HookFixture) -> None:
+    # The dedupe fingerprint ignored `command`, so every shell call in a session
+    # hashed alike and distinct calls under 250ms apart — a parallel batch —
+    # became one row. A simulated session lost 3 of its 5 shell calls.
+    root = tempfile.mkdtemp(prefix="grit-dedupe-root-")
+    proj = tempfile.mkdtemp(prefix="grit-dedupe-")
+    try:
+        f = HookFixture(root=root, proj=proj)
+        for cmd in ("ls", "npm test", "git status"):
+            f.run(f.event("Bash", command=cmd))
+        assert f.count_rows() == 3, "distinct shell calls were merged: %d" % f.count_rows()
+        # Two registrations of ONE call still count once.
+        call = dict(f.event("Bash", command="make"), tool_use_id="u1")
+        f.run(call)
+        f.run(call)
+        assert f.count_rows() == 4, "one call, two registrations, counted twice"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(proj, ignore_errors=True)
+
+
+def _shell_call(f: HookFixture, repo: str, call: str, command: str, effect=None) -> None:
+    """One assistant shell call as the runtime delivers it: Pre, run, Post."""
+    event = {"tool_name": "Bash", "session_id": "sh", "cwd": repo,
+             "tool_use_id": call, "tool_input": {"command": command}}
+    f.run(dict(event, hook_event_name="PreToolUse"))
+    if effect:
+        effect()
+    f.run(dict(event, hook_event_name="PostToolUse"))
+
+
+def _property_observed_shell_calls_do_not_void_the_task(fx: HookFixture) -> None:
+    # The skill tells the assistant to run the user's check and verify_edit
+    # itself through the shell. Each call was opaque, so EVERY task done through
+    # the skill came out UNVERIFIED and scored zero — found by simulating a real
+    # session end to end. The hook now watches the tree around a shell call.
+    repo = tempfile.mkdtemp(prefix="grit-shell-")
+    root = tempfile.mkdtemp(prefix="grit-shell-root-")
+    try:
+        _init_repo(repo)
+        f = HookFixture(root=root, proj=repo)
+        _verify_edit_cmd(repo, "snapshot", "h1", root=root)
+        open(os.path.join(repo, "a.py"), "a").write("human=1\n")  # the user
+        _shell_call(f, repo, "c1", "python3 -m pytest")  # reads, writes nothing
+        assert _verify_edit_cmd(repo, "verify", "h1", root=root) == 0, (
+            "a shell call observed writing nothing must not void the task"
+        )
+
+        _verify_edit_cmd(repo, "snapshot", "h2", root=root)
+        open(os.path.join(repo, "a.py"), "a").write("human=2\n")
+        write = lambda: open(os.path.join(repo, "gen.py"), "w").write("x=1\n")
+        _shell_call(f, repo, "c2", "python3 - <<EOF ...", effect=write)
+        assert _verify_edit_cmd(repo, "verify", "h2", root=root) == 1, (
+            "a shell call observed writing a file is the assistant's work"
+        )
+
+        # And a commit is not authorship: content untouched, status clean.
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        _verify_edit_cmd(repo, "snapshot", "h3", root=root)
+        open(os.path.join(repo, "a.py"), "a").write("human=3\n")
+        commit = lambda: subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "w"],
+            cwd=repo, check=True)
+        _shell_call(f, repo, "c3", "git commit -am w", effect=commit)
+        assert _verify_edit_cmd(repo, "verify", "h3", root=root) == 0, (
+            "committing the user's work is not writing it"
+        )
+
+        # verify_edit is itself run through the shell, so its own call is
+        # always in flight while it reads the log. Excused only when the
+        # command is nothing but that invocation.
+        for command, expected in (
+            ("python3 /x/verify_edit.py verify h5", 0),
+            ("python3 /x/verify_edit.py verify h5 $(touch z)", 3),
+        ):
+            _verify_edit_cmd(repo, "snapshot", "h5", root=root)
+            open(os.path.join(repo, "a.py"), "a").write("human=5\n")
+            f.run({"tool_name": "Bash", "session_id": "sh", "cwd": repo,
+                   "tool_use_id": "v-" + str(expected), "hook_event_name": "PreToolUse",
+                   "tool_input": {"command": command}})
+            assert _verify_edit_cmd(repo, "verify", "h5", root=root) == expected, (
+                "in-flight %r should give %d" % (command, expected)
+            )
+
+        # With no Post (an older install), the call stays unobserved.
+        _verify_edit_cmd(repo, "snapshot", "h4", root=root)
+        open(os.path.join(repo, "a.py"), "a").write("human=4\n")
+        f.run({"tool_name": "Bash", "session_id": "sh", "cwd": repo, "tool_use_id": "c4",
+               "hook_event_name": "PreToolUse", "tool_input": {"command": "ls"}})
+        assert _verify_edit_cmd(repo, "verify", "h4", root=root) == 3, (
+            "a shell call nobody saw finish must stay UNVERIFIED"
+        )
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+        shutil.rmtree(root, ignore_errors=True)
 
 
 if __name__ == "__main__":
